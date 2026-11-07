@@ -130,8 +130,21 @@ def run(context, inputs, params): ...   # context: run_id, backend, log, progres
 ### 4.3. Новый входной формат
 
 Формат задаётся процедурой нормализации, а не ядром: она получает пути к файлам и сама
-решает, чем их читать (`json`, `xml.etree`, что угодно). Датасет хранит `file_glob`
-(например `*.xml`), поэтому обнаружение файлов тоже настраивается, а не зашито.
+решает, чем их читать. Уже поддержаны `.json`, `.jsonl`, `.ndjson`, `.xml`, `.yaml`,
+`.yml`, `.toml`, `.ini`, `.cfg`, `.conf`, `.properties`, `.csv`, `.tsv`, а также
+`.zip`, `.gz`, `.bz2`, `.xz` (снимаются прозрачно) — см. `procedures/spr_formats.py`.
+
+Порядок для нового формата:
+
+1. добавить расширение в `SUPPORTED_EXT` и читатель в `spr_formats.read_bytes`;
+2. добавить маску в `services/datasets.py::SUPPORTED_MASKS`;
+3. проверить, что документ совпадает с JSON: тест в
+   `tests/unit/test_multi_format_readers.py` (образец — YAML/JSONL);
+4. если формат не выражает массивы/`null` — дописать ограничение в `README.md` §4
+   и в `docs/CONTRACTS.md`.
+
+Ядро при этом не меняется: `pipeline/core.py` по-прежнему не знает ни одного
+предметного имени поля.
 
 ---
 

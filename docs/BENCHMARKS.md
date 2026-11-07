@@ -405,7 +405,7 @@ GPU-путь **не подтверждён**, и мы не выдаём его �
 с границами измерения, нагрузкой на машину и версиями:
 
 ```bash
-cd /home/mixantax/nuclearIThackWorkingDir/app     # из корня проекта app/
+cd <корень репозитория>          # команды замеров выполнялись отсюда
 .venv/bin/python tools/bench_report.py env        # железо, версии, настройки кластера
 .venv/bin/python tools/bench_report.py phases     # чтение/разбор/нормализация/запись
 .venv/bin/python tools/bench_report.py compute    # три стадии в своих интерпретаторах

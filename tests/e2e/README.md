@@ -26,7 +26,7 @@ PYTHONPATH=src .venv/bin/python -m change_analysis.worker.main
 Run:
 
 ```sh
-.venv/bin/python -u tools/dev/playwright/ui_suite.py
+.venv/bin/python -u tools/dev/playwright/ui_suite.py   # probe + walkthrough
 ```
 
 Install Playwright if missing (`.venv/bin/pip install playwright`). The drivers
