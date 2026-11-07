@@ -74,6 +74,15 @@
 
 ---
 
+### Автотесты и браузерные проверки (итог, финальный код)
+
+| Набор | Результат | Кто |
+|---|---|---|
+| `pytest tests` (unit 186 / integration 66 / e2e 19) | **271 passed, 0 failed**, 136 с | qa |
+| `tools/acceptance_ui.py` против живого `:8000` | **24 PASS, 0 FAIL** | qa |
+| сквозной сервисный пробник приёмки | **26/26 PASS** | lead |
+| обход всех экранов в Chromium (вход → прогон → отчёт → сводная → drill → карточка заявки) | **13/13 PASS** | lead |
+
 **Проверено:** 2026-11-07, 11:45–12:30 (Europe/Moscow). Каждая строка со статусом
 `VERIFIED` подтверждена в этой сессии: либо запросом к `change_analysis`
 (`ca.runs`, `ca.run_steps`, `ca.run_events`, `ca.check_results`, `ca.check_executions`,
