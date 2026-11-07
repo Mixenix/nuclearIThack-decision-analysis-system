@@ -11,11 +11,24 @@ from .errors import AccessDenied, InvalidRequest, NotFound
 
 
 def default_selections(owner_id: str) -> dict[str, Any]:
-    """A working configuration: the built-in procedures and no checks yet."""
+    """A working configuration: built-in procedures and the delivered checks on.
+
+    The five delivered checks are the ones the task card asks for, so a fresh
+    configuration starts with all of them enabled.  Otherwise "Сохранить и
+    запустить" produces a run with an empty checks report, which looks like a
+    broken report rather than a deliberate choice.
+    """
+    from ..checks.loader import list_builtin_checks
+
+    try:
+        checks = [{"id": spec.id, "params": dict(spec.params)}
+                  for spec in list_builtin_checks()]
+    except Exception:  # noqa: BLE001 - a missing task package must not break the page
+        checks = []
     return {
         "procedures": {stage: procedures.default_selection(stage)
                        for stage in procedures.PROCEDURE_STAGES},
-        "checks": [],
+        "checks": checks,
         "params": {},
     }
 

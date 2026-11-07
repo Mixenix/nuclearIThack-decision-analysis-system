@@ -724,9 +724,23 @@ def request_second_opinion(run_id: str, revision: int,
     try:
         import httpx
 
-        with httpx.Client(timeout=float(settings.llm_timeout_sec)) as client:
-            response = client.post(url, headers=headers,
-                                   content=json.dumps(body, ensure_ascii=False))
+        # One retry on a transport failure.  A single dropped connection used to
+        # turn the whole block into ERROR right in the middle of a demonstration
+        # (observed: ConnectTimeout after 60 s, the very next call succeeded in
+        # 6.7 s).  Only the transport is retried: a 4xx/5xx answer from the
+        # provider is reported as it is, and nothing is fabricated.
+        attempts = 2
+        response = None
+        for attempt in range(1, attempts + 1):
+            try:
+                with httpx.Client(timeout=float(settings.llm_timeout_sec)) as client:
+                    response = client.post(url, headers=headers,
+                                           content=json.dumps(body, ensure_ascii=False))
+                break
+            except (httpx.TransportError, httpx.TimeoutException):
+                if attempt == attempts:
+                    raise
+                time.sleep(2.0 * attempt)
         latency_ms = int((time.perf_counter() - started) * 1000)
         if response.status_code != 200:
             snippet = _redact_text(response.text or "")[:400]
