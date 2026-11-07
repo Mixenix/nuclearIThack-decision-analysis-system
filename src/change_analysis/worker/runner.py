@@ -209,7 +209,8 @@ class PipelineJob:
                     total = int(line.get("total", 0) or progress_total)
                     now = time.perf_counter()
                     if now - last_flush > 1.0:
-                        queue.update_progress(step_id, self.run_id, done, total)
+                        queue.update_progress(step_id, self.run_id, done, total,
+                                              pair_level=stage != "aggregate")
                         queue.heartbeat(self.job_id, self.settings.lease_sec)
                         last_flush = now
                     message = str(line.get("message") or "")
@@ -226,7 +227,8 @@ class PipelineJob:
         if lines:
             last = lines[-1]
             queue.update_progress(step_id, self.run_id, int(last.get("done", 0)),
-                                  int(last.get("total", 0) or progress_total))
+                                  int(last.get("total", 0) or progress_total),
+                                  pair_level=stage != "aggregate")
 
         result_path = out_dir / "result.json"
         result: dict[str, Any] = {}
@@ -651,7 +653,8 @@ class PipelineJob:
             summary = self._summarise()
             with tx() as conn, conn.cursor() as cur:
                 cur.execute(
-                    "UPDATE ca.runs SET summary = %s::jsonb WHERE id = %s",
+                    "UPDATE ca.runs SET summary = %s::jsonb,"
+                    " processed_pairs = expected_pairs WHERE id = %s",
                     (json.dumps(summary), self.run_id),
                 )
             queue.finish(self.job_id, self.run_id, "SUCCEEDED", run_state="SUCCEEDED")

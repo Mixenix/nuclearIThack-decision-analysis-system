@@ -136,16 +136,24 @@ def start_step(run_id: str, job_id: int, stage: str, seq: int,
         return step_id
 
 
-def update_progress(step_id: int, run_id: str, done: int, total: int) -> None:
+def update_progress(step_id: int, run_id: str, done: int, total: int,
+                    pair_level: bool = True) -> None:
+    """Record stage progress; ``processed_pairs`` is only moved by pair-level stages.
+
+    The aggregate stage counts *rows* (289 533 of them), not application pairs, and
+    it used to overwrite the pair counter with that number — the run page then
+    showed an impossible "processed 289 533 of 2 002 pairs".
+    """
     with tx() as conn, conn.cursor() as cur:
         cur.execute(
             "UPDATE ca.run_steps SET progress_done = %s, progress_total = %s WHERE id = %s",
             (done, total, step_id),
         )
-        cur.execute(
-            "UPDATE ca.runs SET processed_pairs = %s WHERE id = %s AND state = 'RUNNING'",
-            (done, run_id),
-        )
+        if pair_level:
+            cur.execute(
+                "UPDATE ca.runs SET processed_pairs = %s WHERE id = %s AND state = 'RUNNING'",
+                (done, run_id),
+            )
 
 
 def add_event(run_id: str, step_id: int | None, level: str, message: str) -> None:

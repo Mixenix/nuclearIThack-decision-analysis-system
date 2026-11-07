@@ -18,7 +18,7 @@ from change_analysis.services import checks as checks_service
 from change_analysis.services import report, runs
 from change_analysis.services.errors import InvalidRequest
 
-from qa_support import REFERENCE
+from qa_support import REFERENCE, comparison_row, segment_row
 
 pytestmark = pytest.mark.e2e
 
