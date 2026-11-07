@@ -153,13 +153,13 @@ def run(context, inputs, params): ...   # context: run_id, backend, log, progres
 Перед правкой незнакомой части проекта:
 
 ```bash
-python tools/codegraph.py                 # слои, маршруты, циклы, отклонения
-PYTHONPATH=src .venv/bin/lint-imports     # контракты из .importlinter
+python tools/codegraph.py                 # слои, маршруты, циклы, отклонения от слоёв
+python tools/codegraph.py --out /tmp/cg   # + codegraph.md / .json / .mmd
 ```
 
-`tools/codegraph.py` строит граф по `ast` (без внешних сервисов) и печатает читаемые
-таблицы; `import-linter` проверяет те же зависимости как контракты и падает при
-нарушении. Пятый шаг `scripts/verify.sh` запускает контракты автоматически.
+`tools/codegraph.py` строит граф импортов по `ast` и печатает читаемые таблицы: слои,
+самые связанные модули, маршруты интерфейса, циклы (ленивые импорты не считаются),
+отклонения от правил слоёв. Внешних зависимостей нет — только стандартная библиотека.
 
 ## 5. Инварианты, которые нельзя ломать
 
