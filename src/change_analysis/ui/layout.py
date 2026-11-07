@@ -49,7 +49,7 @@ def fmt_int(value: Any) -> str:
 def shell(user: dict[str, Any], active: str = "") -> None:
     """Header + navigation.  Called at the top of every authenticated page."""
     with ui.header().classes("items-center gap-4 bg-slate-900 text-white px-4"):
-        ui.label("СПР · Анализ изменений").classes("text-lg font-semibold")
+        ui.label("Graeae · Анализ изменений СПР").classes("text-lg font-semibold")
         ui.space()
         for route, label, key in (
             ("/", "Прогоны", "runs"),

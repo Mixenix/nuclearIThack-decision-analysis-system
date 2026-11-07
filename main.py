@@ -27,7 +27,7 @@ if __name__ in {"__main__", "__mp_main__"}:
     ui.run(
         host=settings.host,
         port=settings.port,
-        title="СПР · Система анализа изменений",
+        title="Graeae · Система анализа изменений СПР",
         storage_secret=settings.storage_secret,
         show=False,
         reload=False,
