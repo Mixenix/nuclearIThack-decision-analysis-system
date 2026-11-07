@@ -340,6 +340,7 @@ def validate_rows(rows: Any, run_id: str, known_app_ids: set[str] | None = None)
 def execute(spec: CheckSpec, run_id: str, overrides: dict | None = None) -> dict[str, Any]:
     """Run one check in-process (tests, single checks).  The worker uses a
     subprocess with a read-only role instead."""
+    from ..db.connection import query
     from ..db.mart import Mart
 
     params = {**spec.params, **(overrides or {})}
@@ -347,7 +348,12 @@ def execute(spec: CheckSpec, run_id: str, overrides: dict | None = None) -> dict
     try:
         mart = Mart(run_id)
         rows = spec.entrypoint(mart, params)
-        validated = validate_rows(rows or [], run_id)
+        # Without this the "APP_IDS must belong to this run" rule was dead on
+        # every in-process path: the unit test passed a set explicitly, while the
+        # production call passed nothing and the check silently did nothing.
+        known = {row["app_id"] for row in
+                 query("SELECT app_id FROM ca.app_segments WHERE run_id = %s", (run_id,))}
+        validated = validate_rows(rows or [], run_id, known_app_ids=known)
         return {"state": "DONE", "rows": validated, "error": "",
                 "duration_ms": int((time.perf_counter() - started) * 1000)}
     except Exception as exc:  # noqa: BLE001 - a technical failure is not a business FAIL

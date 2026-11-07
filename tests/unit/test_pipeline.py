@@ -158,7 +158,13 @@ def test_duplicate_keys_are_reported_not_deduplicated():
 # ---------------------------------------------------------------------------
 
 
-def test_attribute_only_in_after_is_new():
+def test_changed_value_is_value_changed():
+    """A present-in-both attribute with a different value is VALUE_CHANGED.
+
+    The test used to be called "...only in after is new" while asserting
+    VALUE_CHANGED; the real ATTRIBUTE_NEW case is covered by
+    ``test_attribute_present_only_on_one_side`` below.
+    """
     rows = by_key(compare(doc(), doc(decision="APPROVE")))
     row = rows[("decisionResult.decision", "")]
     assert row.change_type == VALUE_CHANGED
@@ -253,9 +259,17 @@ def test_row_key_is_unique_and_path_has_no_array_indices():
 
 
 def test_structural_columns_reconstruct_the_path():
-    for row in normalize_document(doc(trials=[trial()]), "BEFORE", "A1"):
+    """PREFIX + CLASS + SUFFIX + KEY must rebuild PATH — for every row.
+
+    The old assertion ended with ``row.path.replace(row.key, row.key)``, which is
+    ``row.path`` itself: the second allowed value was a tautology, so the test
+    could not fail for the reason it claimed.
+    """
+    rows = normalize_document(doc(trials=[trial()]), "BEFORE", "A1")
+    assert rows
+    for row in rows:
         parts = [p for p in (row.prefix, row.cls, row.suffix, row.key) if p]
-        assert ".".join(parts) in (row.path, row.path.replace(row.key, row.key))
+        assert ".".join(parts) == row.path, f"{parts} не собираются в {row.path}"
 
 
 def test_value_mode_array_uses_the_value_as_key():
