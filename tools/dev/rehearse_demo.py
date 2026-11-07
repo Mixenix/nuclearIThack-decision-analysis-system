@@ -1,6 +1,6 @@
 """Timed rehearsal of the 20-minute defence scenario, executed in a real browser.
 
-Follows docs/DEMO.md block by block and prints the wall-clock cost of each block,
+Follows the demonstration blocks one by one and prints the wall-clock cost of each,
 so the plan can be checked against the 20-minute budget instead of being assumed.
 
     cd app && .venv/bin/python tools/dev/rehearse_demo.py [run_id]

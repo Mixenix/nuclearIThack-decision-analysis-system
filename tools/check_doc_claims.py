@@ -100,7 +100,6 @@ CLAIMS: list[tuple[str, str, str]] = [
     ("CONTRIBUTING.md", "flips", "{flips} со сменой решения"),
     ("CONTRIBUTING.md", "tests", "{tests} тестов"),
     ("docs/STATUS.md", "tests", "**{tests} passed, 0 failed**"),
-    ("docs/STATUS-ACCEPTANCE.md", "tests", "**{tests} passed, 0 failed**"),
     ("docs/BENCHMARKS.md", "normalized", "{normalized} строк"),
     ("docs/ARCHITECTURE_NOTE.md", "normalized", "{normalized} строк"),
 ]

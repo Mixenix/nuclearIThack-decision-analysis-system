@@ -46,7 +46,7 @@ e.g. `15210|AGELOW@21`, `ML_MICRO_LOAN_V1|0`.
 | **ui-app** | `src/change_analysis/ui/`, `main.py`, `tests/e2e/ui_*.py` |
 | **reports** | `src/change_analysis/{reports/,llm/}`, `src/change_analysis/templates/`, `src/change_analysis/static/`, `tests/unit/reports_*.py` |
 
-Two agents never write the same file. `docs/agent_reports/<role>.md` is each
+Two agents never write the same file; each keeps its own report
 agent's own scratch report (report format in PLAN.md §23.3).
 
 ## 2. `db/` — connection, migrations, MartAPI  (owner: db-core)

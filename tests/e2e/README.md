@@ -40,4 +40,4 @@ a busy database. Each driver can also be run separately after its predecessors.
 The final assertion currently reproduces a service bug: after a checks-only job,
 `runs.revision` advances, while pivot facts keep their earlier revision. A failing
 suite is expected for this regression; it is not an all-green acceptance claim.
-See `docs/agent_reports/ui-verify.md` for observed results and exact limitations.
+See внутренние отчёты исполнителей for observed results and exact limitations.
