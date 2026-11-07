@@ -46,11 +46,11 @@ def _literal(text):
 
 
 def element_to_value(element):
-    kind = None
-    for attr_name, attr_value in element.attrib.items():
-        if _local(attr_name) == _local(TYPE):
-            kind = attr_value
-            break
+    # Only the namespaced marker is special: a plain ``type="loan"`` attribute is
+    # ordinary data (README: "обычные атрибуты становятся @имя").  Matching by
+    # local name here swallowed that attribute and, for ``type="null"``, threw
+    # away the element's own content.
+    kind = element.attrib.get(TYPE)
     children = list(element)
     text = element.text or ""
     if children and (text.strip() or any((c.tail or "").strip() for c in children)):
@@ -62,7 +62,7 @@ def element_to_value(element):
     if kind == "array":
         return [element_to_value(c) for c in children]
     attrs = {"@" + _local(k): _literal(v)
-             for k, v in element.attrib.items() if _local(k) != _local(TYPE)}
+             for k, v in element.attrib.items() if k != TYPE}
     if not children and not attrs and kind != "object":
         return _literal(text.strip()) if text.strip() else ""
     result = dict(attrs)

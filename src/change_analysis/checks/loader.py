@@ -229,6 +229,30 @@ def _as_str(value: Any) -> str:
     return str(value)
 
 
+def _count_field(value: Any, name: str, where: str) -> int:
+    """CNT/TOTAL are counts of applications: 1.9 is a broken check, not 1.
+
+    The contract (``checks/README.md``) says these are quantities of applications.
+    Truncating a fractional value produced plausible-looking numbers from a
+    nonsense answer, which is worse than refusing the row.
+    """
+    if value is None or value == "":
+        return 0
+    if isinstance(value, bool):
+        raise CheckError(f"{where}: {name} must be a number, got a boolean")
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        if value.is_integer():
+            return int(value)
+        raise CheckError(f"{where}: {name} must be a whole number, got {value!r}")
+    text = _as_str(value).strip()
+    try:
+        return int(text)
+    except ValueError as exc:
+        raise CheckError(f"{where}: {name} must be a whole number, got {text!r}") from exc
+
+
 def validate_rows(rows: Any, run_id: str, known_app_ids: set[str] | None = None) -> list[dict]:
     """Validate the rows a check returned, with errors that name the field."""
     if rows is None:
@@ -254,11 +278,8 @@ def validate_rows(rows: Any, run_id: str, known_app_ids: set[str] | None = None)
         confidence = _as_str(row["CONFIDENCE"])
         if confidence not in ("HIGH", "LOW"):
             raise CheckError(f"{where}: CONFIDENCE must be HIGH or LOW, got {confidence!r}")
-        try:
-            cnt = int(row.get("CNT") or 0)
-            total = int(row.get("TOTAL") or 0)
-        except (TypeError, ValueError) as exc:
-            raise CheckError(f"{where}: CNT/TOTAL must be integers ({exc})") from exc
+        cnt = _count_field(row.get("CNT"), "CNT", where)
+        total = _count_field(row.get("TOTAL"), "TOTAL", where)
         if cnt < 0 or total < 0:
             raise CheckError(f"{where}: CNT/TOTAL must not be negative")
         app_ids = row.get("APP_IDS") or []

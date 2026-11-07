@@ -119,8 +119,12 @@ class PipelineJob:
         run_dir = (dataset_root / root_ref).resolve() if root_ref else dataset_root
         before_dir = run_dir / snapshot["slices"]["BEFORE"]["dir"]
         after_dir = run_dir / snapshot["slices"]["AFTER"]["dir"]
+        root_resolved = dataset_root.resolve()
         for path in (before_dir, after_dir):
-            if not str(path.resolve()).startswith(str(dataset_root.resolve())):
+            resolved = path.resolve()
+            # ``startswith`` on strings accepted ``/x/data-leak`` for root
+            # ``/x/data``; compare resolved paths instead.
+            if not (resolved == root_resolved or resolved.is_relative_to(root_resolved)):
                 raise StageFailed("prepare", f"dataset path escapes DATASET_ROOT: {path}")
         if not before_dir.is_dir() or not after_dir.is_dir():
             raise StageFailed("prepare", f"slice directories not found under {run_dir}")
@@ -476,8 +480,13 @@ class PipelineJob:
 
         for index, spec in enumerate(checks, start=1):
             check_id = spec["id"]
-            out_dir = self.root / "checks" / check_id
+            # One directory per revision: a previous revision's result.json must
+            # never be mistaken for this one when the subprocess dies before it
+            # writes anything (that published a stale result as if it were new).
+            out_dir = self.root / "checks" / check_id / f"rev{revision}"
             out_dir.mkdir(parents=True, exist_ok=True)
+            for stale in ("result.json", "rows.json"):
+                (out_dir / stale).unlink(missing_ok=True)
             spec_path = out_dir / "spec.json"
             spec_path.write_text(json.dumps({
                 "run_id": self.run_id,
@@ -499,7 +508,7 @@ class PipelineJob:
             started = time.perf_counter()
             try:
                 with (out_dir / "stdout.log").open("w", encoding="utf-8") as log:
-                    subprocess.run(  # noqa: S603 - argv list, no shell
+                    completed = subprocess.run(  # noqa: S603 - argv list, no shell
                         argv, stdout=log, stderr=subprocess.STDOUT, env=env,
                         cwd=str(out_dir),
                         timeout=max(60, self.settings.stage_timeout_sec // 4),
@@ -507,9 +516,21 @@ class PipelineJob:
                     )
                 duration_ms = int((time.perf_counter() - started) * 1000)
                 result_path = out_dir / "result.json"
-                result = json.loads(result_path.read_text(encoding="utf-8")) \
-                    if result_path.exists() else {
-                        "ok": False, "error": "check produced no result"}
+                if completed.returncode != 0:
+                    # a check that killed its own interpreter is a technical
+                    # failure, never a business result
+                    tail = ""
+                    try:
+                        tail = (out_dir / "stdout.log").read_text(
+                            encoding="utf-8", errors="replace")[-400:]
+                    except OSError:
+                        pass
+                    result = {"ok": False,
+                              "error": f"check process exited with {completed.returncode}: {tail}"}
+                else:
+                    result = json.loads(result_path.read_text(encoding="utf-8")) \
+                        if result_path.exists() else {
+                            "ok": False, "error": "check produced no result"}
             except subprocess.TimeoutExpired:
                 duration_ms = int((time.perf_counter() - started) * 1000)
                 result = {"ok": False, "error": "check timed out"}

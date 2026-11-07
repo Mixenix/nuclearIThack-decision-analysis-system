@@ -94,8 +94,14 @@ def test_database(settings):
     assert_test_database(settings.database_url)
     applied = apply_migrations()
     # ``%`` cannot appear unescaped in a parameterised psycopg query, so the
-    # prefix test is expressed as a regular expression
-    stale = execute("DELETE FROM ca.runs WHERE name ~ '^qa-'")
+    # prefix test is expressed as a regular expression.
+    #
+    # Only runs that existed *before* this session started are removed: two test
+    # sessions on the same throw-away database used to delete each other's runs
+    # mid-flight, which surfaced as a foreign-key error in ``run_events`` and
+    # looked like a broken pipeline.
+    stale = execute(
+        "DELETE FROM ca.runs WHERE name ~ '^qa-' AND created_at < now() - interval '2 seconds'")
     for table in ("comparison_rows", "pivot_facts", "pivot_membership",
                   "app_segments", "product_segments"):
         execute(f"ANALYZE ca.{table}")

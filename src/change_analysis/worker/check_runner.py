@@ -16,6 +16,30 @@ import traceback
 from pathlib import Path
 
 
+def _run_app_ids(run_id: str) -> set[str] | None:
+    """Applications of this run, so APP_IDS cannot point at somebody else's run.
+
+    Returns ``None`` when the list cannot be read: a broken reference is then
+    reported by the service layer rather than blocking the check itself.
+    """
+    try:
+        import os
+
+        import psycopg
+
+        # the runner hands the subprocess a read-only DSN (role ca_ro)
+        dsn = os.environ.get("DATABASE_URL", "")
+        if not dsn:
+            return None
+        with psycopg.connect(dsn, autocommit=True) as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT app_id FROM ca.app_segments WHERE run_id = %s",
+                            (run_id,))
+                return {row[0] for row in cur.fetchall()}
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def main(argv: list[str]) -> int:
     spec = json.loads(Path(argv[1]).read_text(encoding="utf-8"))
     out_dir = Path(spec["out_dir"])
@@ -34,7 +58,8 @@ def main(argv: list[str]) -> int:
         mart = Mart(spec["run_id"])
         params = {**check.params, **(spec.get("params") or {})}
         rows = check.entrypoint(mart, params)
-        rows = validate_rows(rows or [], spec["run_id"])
+        known = _run_app_ids(spec["run_id"])
+        rows = validate_rows(rows or [], spec["run_id"], known_app_ids=known)
         (out_dir / "rows.json").write_text(
             json.dumps(rows, ensure_ascii=False), encoding="utf-8"
         )

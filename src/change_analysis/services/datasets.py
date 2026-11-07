@@ -85,7 +85,15 @@ def precheck_dataset(root_ref: str, abs_root: str | None = None,
                 "run_dir": str(run_dir)}
     before_dir = run_dir / before_rel
     after_dir = run_dir / after_rel
+    # A manifest is data, not a trusted instruction: ``../sibling`` used to slip
+    # past, because ``data-leak`` and ``data`` share a string prefix.  Containment
+    # is decided on resolved paths, not on text.
+    base = _root_for(abs_root)
     for path in (before_dir, after_dir):
+        resolved = path.resolve()
+        if not (resolved == base or resolved.is_relative_to(base)):
+            errors.append(f"slice directory escapes the dataset root: {path}")
+            continue
         if not path.is_dir():
             errors.append(f"slice directory missing: {path}")
     if errors:

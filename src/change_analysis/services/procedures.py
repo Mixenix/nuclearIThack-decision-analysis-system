@@ -12,7 +12,13 @@ import json
 from pathlib import Path
 from typing import Any
 
-from ..checks.loader import CheckError, list_builtin_checks, list_script_checks, load_from_file
+from ..checks.loader import (
+    CheckError,
+    _metadata_from_source,
+    list_builtin_checks,
+    list_script_checks,
+    load_from_file,
+)
 from ..config import load_settings
 from ..db.connection import query, tx
 from .errors import InvalidRequest, NotFound
@@ -87,6 +93,22 @@ def resolve_procedure(owner_id: str, stage: str, selection: dict[str, Any] | Non
     raise InvalidRequest(f"{stage}: unknown procedure source {source!r}")
 
 
+def _registered_file(ref: str) -> Path:
+    """Resolve a registered ``.py`` and refuse anything outside SCRIPT_ROOT."""
+    settings = load_settings()
+    root = Path(settings.script_root).resolve()
+    candidate = Path(ref)
+    if not candidate.is_absolute():
+        candidate = root / candidate
+    resolved = candidate.resolve()
+    if not (resolved == root or resolved.is_relative_to(root)):
+        raise InvalidRequest(f"check file {ref} is outside SCRIPT_ROOT")
+    if not resolved.is_file():
+        raise NotFound(f"check file not found: {ref}")
+    return resolved
+
+
+
 def resolve_checks(owner_id: str, selections: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
     """Materialise the chosen checks, including their code."""
     if not selections:
@@ -115,10 +137,22 @@ def resolve_checks(owner_id: str, selections: list[dict[str, Any]] | None) -> li
                         "source_kind": "workspace", "source_ref": str(rows[0]["id"])})
             continue
         if source == "file" and item.get("ref"):
-            spec = load_from_file(item["ref"])
-            out.append({"id": spec.id, "label": spec.label, "code": spec.code,
-                        "params": {**spec.params, **params},
-                        "source_kind": "file", "source_ref": spec.source_ref})
+            # Read the file, never import it: resolving a configuration happens in
+            # the web process, and a module-level side effect there would freeze
+            # every session (PLAN.md §23.1, "no user code in the UI process").
+            # Metadata comes from the AST; the code is executed later, in the
+            # worker's own interpreter.
+            resolved = _registered_file(item["ref"])
+            code = resolved.read_text(encoding="utf-8")
+            meta = _metadata_from_source(code, str(resolved))
+            if meta is None:
+                raise InvalidRequest(
+                    f"{resolved.name}: no CHECK declaration found; register a file that "
+                    "exports CHECK = {'id','label','params','entrypoint'}")
+            file_id, label, file_params = meta
+            out.append({"id": file_id, "label": label, "code": code,
+                        "params": {**file_params, **params},
+                        "source_kind": "file", "source_ref": str(resolved)})
             continue
         spec = builtin.get(check_id) or scripted.get(check_id)
         if spec is None:
