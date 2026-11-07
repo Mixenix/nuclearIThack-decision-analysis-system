@@ -1,5 +1,10 @@
 # Real browser verification
 
+> Ручные браузерные сценарии (без ассертов pytest) переехали в
+> `tools/dev/playwright/` — они полезны при отладке, но не являются тестами
+> и не должны попадать в `pytest`. Здесь остаются только `test_*.py`.
+
+
 Drivers use Playwright with the existing `/usr/bin/chromium`, headless, at
 1440 × 1000. They click rendered controls and navigate normal pages; no injected
 application state or authentication shortcuts. The second user gets a fresh

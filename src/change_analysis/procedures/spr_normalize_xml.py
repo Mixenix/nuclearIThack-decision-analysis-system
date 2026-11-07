@@ -20,6 +20,21 @@ from xml.etree import ElementTree as ET
 TYPE = "{urn:change-analysis:types}type"
 
 
+def _local(name: str) -> str:
+    """Element/attribute name without the namespace: ``{urn:x}age`` -> ``age``.
+
+    ElementTree renders namespaced names in Clark notation.  Left as is, the
+    namespace would leak into ``PATH`` and two slices that declare the same
+    namespace under different prefixes would compare as different attributes.
+    Stripping keeps paths readable and comparable; the price is that two
+    elements with the same local name in *different* namespaces merge into one
+    key, which is documented in ``DECISIONS.md``.
+    """
+    if name.startswith("{"):
+        return name.split("}", 1)[1]
+    return name
+
+
 def _literal(text):
     try:
         value = json.loads(text)
@@ -31,7 +46,11 @@ def _literal(text):
 
 
 def element_to_value(element):
-    kind = element.get(TYPE)
+    kind = None
+    for attr_name, attr_value in element.attrib.items():
+        if _local(attr_name) == _local(TYPE):
+            kind = attr_value
+            break
     children = list(element)
     text = element.text or ""
     if children and (text.strip() or any((c.tail or "").strip() for c in children)):
@@ -42,13 +61,14 @@ def element_to_value(element):
         return text
     if kind == "array":
         return [element_to_value(c) for c in children]
-    attrs = {"@" + k: _literal(v) for k, v in element.attrib.items() if k != TYPE}
+    attrs = {"@" + _local(k): _literal(v)
+             for k, v in element.attrib.items() if _local(k) != _local(TYPE)}
     if not children and not attrs and kind != "object":
         return _literal(text.strip()) if text.strip() else ""
     result = dict(attrs)
     grouped = {}
     for child in children:
-        grouped.setdefault(child.tag, []).append(element_to_value(child))
+        grouped.setdefault(_local(child.tag), []).append(element_to_value(child))
     for key, values in grouped.items():
         result[key] = values if len(values) > 1 else values[0]
     if text.strip():

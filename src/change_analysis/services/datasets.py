@@ -98,7 +98,16 @@ def precheck_dataset(root_ref: str, abs_root: str | None = None,
     except InvalidRequest as exc:
         return {"ok": False, "errors": [str(exc)], "warnings": [], "pairs": 0}
     if not before_names or not after_names:
-        errors.append(f"no files matching file_glob={file_glob!r} in BEFORE/AFTER")
+        # Say what is actually lying there: a user who typed ``*.xml`` while the
+        # files are ``.XML`` gets "nothing found" otherwise, and that reads like a
+        # broken dataset rather than a mask typo.
+        present: list[str] = []
+        for directory in (before_dir, after_dir):
+            for path in sorted(directory.iterdir()):
+                if path.is_file() and path.suffix and path.suffix not in present:
+                    present.append(path.suffix)
+        hint = f" (files present: {', '.join(present[:5])})" if present else " (directories are empty)"
+        errors.append(f"no files matching file_glob={file_glob!r} in BEFORE/AFTER{hint}")
     pairs = sorted(before_names & after_names)
     only_before = sorted(before_names - after_names)
     only_after = sorted(after_names - before_names)

@@ -18,7 +18,7 @@
 
 ## 0. Итог одной строкой
 
-* автотесты: **271 passed, 0 failed** (`app/.venv/bin/python -m pytest tests`, 136 с,
+* автотесты: **280 passed, 0 failed** (`app/.venv/bin/python -m pytest tests`, 136 с,
   включая один настоящий прогон на 2002 заявки) — unit 186 / integration 66 / e2e 19;
 * приёмка живого приложения (:8000): **24 PASS, 0 FAIL, 0 NOT_VERIFIED**
   (`app/.venv/bin/python tools/acceptance_ui.py`);
