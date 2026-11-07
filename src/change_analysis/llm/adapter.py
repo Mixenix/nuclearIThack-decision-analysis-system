@@ -599,7 +599,28 @@ def load_report(run_id: str, revision: int | None = None) -> dict[str, Any] | No
 
     latest_rows = query(select + " ORDER BY id DESC LIMIT 1", tuple(scope))
     if not latest_rows:
-        return None
+        if revision is None:
+            return None
+        # Publishing a new check report bumps the revision, and the opinion for
+        # the previous revision is still a real, stored answer.  Refusing to show
+        # it made the block look "never requested" right after the moment the
+        # analyst adds a check — the very situation the demonstration walks into.
+        # Return it, but with its own revision so the interface can say so.
+        any_revision = query("SELECT revision FROM ca.llm_reports WHERE run_id = %s"
+                             " AND state = 'DONE' ORDER BY id DESC LIMIT 1", (run_id,))
+        if not any_revision:
+            return None
+        fallback_revision = int(any_revision[0]["revision"])
+        latest_rows = query(select + " ORDER BY id DESC LIMIT 1",
+                            (run_id, fallback_revision))
+        if not latest_rows:
+            return None
+        # the "latest successful" lookup below uses ``scope``, so it has to point
+        # at the revision we actually fell back to
+        scope = [run_id, fallback_revision]
+        stale_revision = fallback_revision
+    else:
+        stale_revision = None
     latest = latest_rows[0]
 
     row = latest

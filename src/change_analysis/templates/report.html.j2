@@ -224,6 +224,10 @@
   <ul>{% for item in llm.next_steps %}<li>{{ item }}</li>{% endfor %}</ul>
   {% endif %}
 
+  {% if llm.revision and llm.report_revision and llm.revision != llm.report_revision %}
+  <p class="note">Мнение получено по ревизии {{ llm.revision }}, отчёт — ревизия
+  {{ llm.report_revision }}: проверки с тех пор могли измениться.</p>
+  {% endif %}
   {% if llm.dropped_malformed %}
   <p class="note">Отброшено наблюдений без текста (модель вернула пустое) —
   {{ llm.dropped_malformed }}: они не показаны, но и не выдаются за валидные.</p>

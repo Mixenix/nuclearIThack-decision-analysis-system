@@ -114,6 +114,7 @@ def _llm_view(stored: dict | None) -> dict | None:
             "at": _time_text(last_attempt.get("at")),
         }
     return {
+        "revision": int(stored.get("revision") or 0),
         "state": str(stored.get("state") or "ERROR"),
         "provider": str(stored.get("provider") or ""),
         "model": str(stored.get("model") or ""),
@@ -126,6 +127,7 @@ def _llm_view(stored: dict | None) -> dict | None:
         "observations": observations,
         "uncertainty": [str(u) for u in (stored.get("uncertainty") or [])],
         "next_steps": [str(s) for s in (stored.get("next_steps") or [])],
+        "revision": int(stored.get("revision") or 0),
         "dropped_evidence": int(stored.get("dropped_evidence") or 0),
         "dropped_malformed": int(stored.get("dropped_malformed") or 0),
         "error": str(stored.get("error") or ""),
@@ -203,6 +205,8 @@ def export_report(run_id: str, out_path: str, base_url: str) -> str:
     summary = build_summary(run_id, FilterSpec(run_id=str(run_id)))
     align_summary_checks(summary, checks)
     llm = _llm_view(load_report(run_id, revision))
+    if llm is not None:
+        llm["report_revision"] = int(revision)
     html = render_report(run, summary, checks, base_url, llm=llm,
                          llm_status=_llm_status(), configuration=configuration)
     path.parent.mkdir(parents=True, exist_ok=True)

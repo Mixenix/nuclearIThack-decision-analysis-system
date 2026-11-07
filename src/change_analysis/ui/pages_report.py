@@ -321,6 +321,13 @@ def report_page(run_id: str, revision: int | None = None) -> None:
                         ui.label("Что предлагает проверить").classes("font-medium mt-2")
                         for entry in stored["next_steps"]:
                             ui.label(f"— {entry}").classes("text-xs text-slate-600")
+                    if int(stored.get("revision") or revision) != int(revision):
+                        ui.label(
+                            f"Это мнение относится к ревизии {stored.get('revision')}, "
+                            f"текущая ревизия отчёта — {revision}: проверки с тех пор "
+                            f"могли измениться. Нажмите кнопку, чтобы получить мнение "
+                            f"по текущей."
+                        ).classes("text-xs text-amber-700 mt-1")
                     if stored.get("dropped_malformed"):
                         ui.label("Отброшено наблюдений без текста: "
                                  f"{stored['dropped_malformed']}") \
