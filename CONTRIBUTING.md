@@ -57,7 +57,7 @@ src/change_analysis/
   reports/{summary,export}.py   сводка и HTML-отчёт
   llm/adapter.py            независимое мнение ИИ (DeepSeek), ограниченный payload
   templates/report.html.j2  автономный HTML (inline CSS, без CDN)
-tests/{unit,integration,e2e} автотесты (339 тестов)
+tests/{unit,integration,e2e} автотесты (345 тестов)
 tools/                      bench_report.py, acceptance_ui.py, validate_against_reference.py
 docs/                       CONTRACTS, STATUS, BENCHMARKS, DEMO, DECISIONS, ARCHITECTURE_NOTE
 ```
@@ -147,6 +147,19 @@ def run(context, inputs, params): ...   # context: run_id, backend, log, progres
 предметного имени поля.
 
 ---
+
+## 4.4. Карта кода и контракты слоёв
+
+Перед правкой незнакомой части проекта:
+
+```bash
+python tools/codegraph.py                 # слои, маршруты, циклы, отклонения
+PYTHONPATH=src .venv/bin/lint-imports     # контракты из .importlinter
+```
+
+`tools/codegraph.py` строит граф по `ast` (без внешних сервисов) и печатает читаемые
+таблицы; `import-linter` проверяет те же зависимости как контракты и падает при
+нарушении. Пятый шаг `scripts/verify.sh` запускает контракты автоматически.
 
 ## 5. Инварианты, которые нельзя ломать
 

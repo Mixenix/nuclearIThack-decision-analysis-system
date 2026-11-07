@@ -258,9 +258,18 @@ def discover_dataset_roots() -> list[dict[str, Any]]:
 
 
 def ensure_delivered_dataset(owner_id: str) -> str | None:
-    """Bootstrap: register the run shipped with the task package, if present."""
-    for candidate in discover_dataset_roots():
-        if candidate["ok"]:
-            return register_dataset(owner_id, f"Демо-прогон {candidate['root_ref']}",
-                                    candidate["root_ref"])
-    return None
+    """Bootstrap: register the run shipped with the task package, if present.
+
+    В ``DATASET_ROOT`` могут лежать и другие наборы (например, сгенерированный
+    мок). «Выданным» считаем тот, что начинается с ``RUN-`` — так его называет
+    пакет задания; если такого нет, берём самый большой по числу пар, чтобы выбор
+    был предсказуемым, а не зависел от порядка обхода каталога.
+    """
+    usable = [candidate for candidate in discover_dataset_roots() if candidate["ok"]]
+    if not usable:
+        return None
+    delivered = [c for c in usable if str(c["root_ref"]).upper().startswith("RUN-")]
+    chosen = delivered[0] if delivered else max(
+        usable, key=lambda c: int(c.get("pairs") or 0))
+    return register_dataset(owner_id, f"Демо-прогон {chosen['root_ref']}",
+                            chosen["root_ref"])

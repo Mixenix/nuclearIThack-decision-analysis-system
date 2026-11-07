@@ -1,0 +1,82 @@
+# Контракты зависимостей: архитектура проверяется командой, а не «на глаз».
+#
+#   PYTHONPATH=src .venv/bin/lint-imports
+#
+# Все контракты ниже — те, что проект соблюдает сегодня. Они ловят регресс:
+# как только ядро потянет базу или интерфейс полезет в SQL напрямую, проверка упадёт.
+[importlinter]
+root_package = change_analysis
+
+[importlinter:contract:1]
+name = Ядро конвейера не знает ни про данные, ни про интерфейс
+type = forbidden
+source_modules =
+    change_analysis.pipeline
+forbidden_modules =
+    change_analysis.ui
+    change_analysis.worker
+    change_analysis.services
+    change_analysis.db
+    change_analysis.reports
+    change_analysis.llm
+    change_analysis.checks
+    change_analysis.auth
+
+[importlinter:contract:2]
+name = Слой данных не знает про сервисы, воркер и интерфейс
+type = forbidden
+source_modules =
+    change_analysis.db
+forbidden_modules =
+    change_analysis.ui
+    change_analysis.worker
+    change_analysis.services
+    change_analysis.reports
+    change_analysis.llm
+    change_analysis.checks
+
+[importlinter:contract:3]
+name = Фундамент (контракты и настройки) ни от кого не зависит
+type = forbidden
+source_modules =
+    change_analysis.contracts
+    change_analysis.config
+forbidden_modules =
+    change_analysis.ui
+    change_analysis.worker
+    change_analysis.services
+    change_analysis.reports
+    change_analysis.llm
+    change_analysis.checks
+    change_analysis.procedures
+    change_analysis.pipeline
+    change_analysis.db
+
+[importlinter:contract:4]
+name = Интерфейс не обращается к базе и воркеру напрямую
+type = forbidden
+source_modules =
+    change_analysis.ui
+forbidden_modules =
+    change_analysis.db
+    change_analysis.worker
+allow_indirect_imports = True
+
+[importlinter:contract:5]
+name = Воркер не импортирует интерфейс
+type = forbidden
+source_modules =
+    change_analysis.worker
+forbidden_modules =
+    change_analysis.ui
+
+[importlinter:contract:6]
+name = Процедуры не знают про базу, сервисы и интерфейс
+type = forbidden
+source_modules =
+    change_analysis.procedures
+forbidden_modules =
+    change_analysis.db
+    change_analysis.services
+    change_analysis.ui
+    change_analysis.worker

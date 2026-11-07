@@ -41,6 +41,8 @@ def report_page(run_id: str, revision: int | None = None) -> None:
             ui.space()
             ui.button("Сводная таблица", icon="table_chart",
                       on_click=lambda: ui.navigate.to(f"/runs/{run_id}/explore")).props("outline")
+            ui.button("Карта изменений", icon="insights",
+                      on_click=lambda: ui.navigate.to(f"/runs/{run_id}/insights")).props("outline")
 
             download_target = ui.label("").classes("text-xs text-slate-500")
 

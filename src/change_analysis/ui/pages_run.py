@@ -40,6 +40,9 @@ def run_page(run_id: str) -> None:
                                       on_click=lambda: ui.navigate.to(f"/runs/{run_id}/report"))
             explore_button = ui.button("Сводная таблица", icon="table_chart",
                                        on_click=lambda: ui.navigate.to(f"/runs/{run_id}/explore"))
+            ui.button("Карта изменений", icon="insights",
+                      on_click=lambda: ui.navigate.to(f"/runs/{run_id}/insights")) \
+                .props("outline")
             retry_button = ui.button("Повторить", icon="refresh",
                                      on_click=lambda: do_retry()).props("outline")
         ui.label(f"Датасет: {run.get('dataset_name') or '—'} · "
