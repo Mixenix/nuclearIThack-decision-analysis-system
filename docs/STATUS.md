@@ -42,7 +42,7 @@
 ## Что проверено и чем
 
 Пометка «я» = проверка выполнена агентом документации и замеров по БД/CLI 2026-11-07;
-пометка «qa» = проверка выполнена агентом тестов (см. `agent_reports/qa-tests.md`).
+пометка «qa» = проверка выполнена агентом тестов (см. `docs/STATUS-ACCEPTANCE.md`).
 
 | Группа | Чем | Результат | Кто |
 |---|---|---|---|
@@ -53,8 +53,8 @@
 | Переход «ячейка → заявки» | `drill()` против прямого SQL | 5 ячеек: совпадение `cell = drill.total = SQL`; множество `APP_ID` совпало (385) | я |
 | HTML-экспорт | `services.report.export_html` | файл 65 802 байта, ссылки абсолютные, внешних ресурсов нет | я |
 | LLM-мнение | `ca.llm_reports` | `state=DONE`, 8 наблюдений, `payload_hash=12813f1b…` | я (по БД) |
-| Ядро (ключи, типы, массивы, бакеты, null) | `pytest tests/unit` | см. `agent_reports/qa-tests.md` | qa |
-| Числа на выданном наборе (эталон) | `tools/validate_against_reference.py OPEN` | см. `agent_reports/qa-tests.md` | qa |
+| Ядро (ключи, типы, массивы, бакеты, null) | `pytest tests/unit` | см. `docs/STATUS-ACCEPTANCE.md` | qa |
+| Числа на выданном наборе (эталон) | `tools/validate_against_reference.py OPEN` | см. `docs/STATUS-ACCEPTANCE.md` | qa |
 | Числа на отложенных 998 | `tools/validate_against_reference.py HOLDOUT` | `248 / 186`, `ALL SEGMENT FIELDS MATCH` (строка прогона удалена при уборке) | я (запуск) |
 | Полный прогон «нажали Запустить → отчёт» | `ca.run_steps` + `ca.run_events` | SUCCEEDED, **71.4 с** на свободной машине; **157.1 с** на каноническом прогоне при параллельной нагрузке | я |
 | Отклик отчёта | прямые вызовы `services.report.*` | `BENCHMARKS.md §3` | я |
