@@ -45,9 +45,18 @@ def main() -> int:
     parser.add_argument("--expected", help="expected_*.csv from the organizers")
     parser.add_argument("--expect-changed", type=int)
     parser.add_argument("--expect-flips", type=int)
+    parser.add_argument("--dataset-root",
+                        help="override DATASET_ROOT for this check only (the run "
+                             "directory must live inside it)")
     parser.add_argument("--login", default="analyst")
     parser.add_argument("--name", default="")
     args = parser.parse_args()
+
+    if args.dataset_root:
+        os.environ["DATASET_ROOT"] = str(Path(args.dataset_root).resolve())
+        from change_analysis.config import load_settings as _reload
+
+        _reload(force=True)
 
     apply_migrations()
     settings = load_settings()

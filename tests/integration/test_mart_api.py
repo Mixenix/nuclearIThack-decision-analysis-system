@@ -41,6 +41,16 @@ def test_reference_application_counts(mart):
     assert len(flips) == REFERENCE["decision_changed"]
 
 
+def test_all_four_change_types_exist_in_a_real_run(mart):
+    """Приёмка: «Различаются четыре типа изменения» — each one must be non-empty."""
+    counts = {change: mart.count(change_type=change)
+              for change in ("SAME", "VALUE_CHANGED", "ATTRIBUTE_NEW", "ATTRIBUTE_LOST")}
+    assert all(count > 0 for count in counts.values()), counts
+    assert sum(counts.values()) == REFERENCE["rows"]
+    assert counts["SAME"] == mart.count(diff_flag=0)
+    assert sum(v for k, v in counts.items() if k != "SAME") == mart.count(diff_flag=1)
+
+
 def test_row_shape_is_exactly_the_contract(mart):
     row = next(mart.rows(path="characteristics.score_okb"))
     assert set(row) == {

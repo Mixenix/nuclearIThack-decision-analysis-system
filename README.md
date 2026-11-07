@@ -87,6 +87,14 @@ cp .env.example .env          # затем отредактируйте пути
 `pandas`/`numpy` в списке нет: конвейер написан на stdlib и их не импортирует
 (`grep -rn "import pandas" src/` → пусто).
 
+Проверено на чистом окружении (2026-11-07, 12:25): создан пустой venv, установлены ровно
+эти семь пакетов, `pandas` в нём отсутствует; затем `import main` прошёл (миграции
+применились, страницы зарегистрировались) и `python -m change_analysis.cli bootstrap`
+создал в пустой базе 21 таблицу схемы `ca`, двух пользователей и зарегистрировал датасет.
+Единственный побочный шум — `PythonFinalizationError: cannot join thread at interpreter
+shutdown` в конце работы CLI: это `psycopg_pool` закрывается при выходе, на результат
+команды не влияет.
+
 ### 3.1. База данных
 
 **Вариант A — свой кластер проекта (ничего не нужно настраивать в системе).**
@@ -198,6 +206,14 @@ localhost того, кто этот файл открыл.
 PYTHONPATH=src .venv/bin/python -m change_analysis.worker.main       # воркер
 ```
 
+**После любой правки кода приложения нужен перезапуск процесса.** `web.sh` запускает
+`main.py` без autoreload (`reload=False`), поэтому правки `src/change_analysis/**` в уже
+работающем процессе не применяются: страница продолжит отдавать старый код. Симптом,
+который мы ловили дважды: «исправили, а сводная всё равно пустая». Правильный порядок —
+остановить `web.sh`, запустить снова (воркер тоже перезапустить, если правились
+`procedures/**` или `worker/**`), и только затем проверять. Миграции применяются при
+старте сами, вручную их накатывать не нужно.
+
 Проверить, что всё поднялось:
 
 ```bash
@@ -255,6 +271,13 @@ PYTHONPATH=src .venv/bin/python -m change_analysis.cli run analyst
 команда может напечатать `state=RUNNING` вместо `SUCCEEDED` — это нормально: результат
 смотрите на странице прогона или в таблице `ca.runs`. Команда `bootstrap` (см. §3.2)
 идемпотентна, её можно повторять.
+
+**Ограничение CLI:** `cli run` берёт **первый** зарегистрированный датасет из
+`list_datasets()` и не спрашивает, какой нужен. Если в базе осталась регистрация с
+несуществующим путём (например, после `tools/acceptance.py` с внешним `--run-dir`),
+команда упадёт с `dataset precheck failed: manifest.json not found in …` — тогда
+запускайте прогон из интерфейса (там датасет выбирается) или удалите лишнюю запись:
+`DELETE FROM ca.datasets WHERE id = '<id>';` (на прогоны это не влияет).
 
 ---
 
@@ -350,3 +373,27 @@ app/
   tests/{unit,integration,e2e}
   docs/                      контракты, решения, статус, измерения, демо
 ```
+
+---
+
+## 10. Что в этом README проверено запуском (2026-11-07, Europe/Moscow)
+
+| Команда / утверждение | Как проверено | Результат |
+|---|---|---|
+| `python3 -m venv .venv` + `pip install` семи пакетов | пустое окружение, `pandas` в нём нет | установилось, `import main` прошёл |
+| `./scripts/pg.sh init` / `status` | запуск на этой машине | идемпотентно; «database change_analysis ready on 127.0.0.1:55432» |
+| `PYTHONPATH=src .venv/bin/python -m change_analysis.cli bootstrap` | запуск | миграции применены, 2 пользователя, датасет зарегистрирован |
+| `… cli run analyst` | запуск в **чистой** базе (создана с нуля) | `state=SUCCEEDED`, `rows=289533, facts=21601, pairs=2002, changed=502, decision_changed=385`, 139 с при загруженной машине |
+| `./scripts/web.sh` → адрес из `APP_HOST/APP_PORT` | живой процесс, `curl /login` | HTTP 200 на порту 8000 (в этой `.env` был `APP_PORT=8000`) |
+| таблица «что должно получиться» в §6 | запросы к `ca.runs.summary` и `ca.comparison_rows` | все числа совпали |
+| `.venv/bin/python -m pytest tests/unit -q` | запуск в `change_analysis_test` | 171 passed, 2 xfail |
+| `.venv/bin/python -m pytest tests/integration -q` | то же | **3 падения** на момент проверки (зона агента тестов): `test_approval_rate_numbers_reproduce_from_the_mart` (`UniqueViolation`), `test_export_files_are_per_run_and_do_not_leak_between_users`, `test_cell_keys_survive_values_with_separators` |
+| `tools/validate_against_reference.py OPEN` | запуск | 502 / 385 / 289 533, `ALL SEGMENT FIELDS MATCH`, `pipe=4.01s` |
+| `tools/validate_against_reference.py HOLDOUT` | запуск | 248 / 186, `ALL SEGMENT FIELDS MATCH`, `pipe=2.03s` |
+| `tools/acceptance.py …` | **не запускал**: создаёт ещё один прогон на 998 пар и ~250 МБ. Работоспособность подтверждена существующим прогоном `8475782e…` (`changed=248, decision_changed=186`), который был им создан | не проверено лично |
+| `curl`-проверка воркера / `worker.sh` | воркер работал как отдельный процесс во время всех прогонов | подтверждено журналом прогонов |
+| Вариант Б установки (внешний PostgreSQL, §3.1) | **не проверялся**: на этой машине нет второго кластера | не проверено |
+
+Также важно для тех, кто будет воспроизводить: числа времени в README не «целевые», а
+измеренные на этой машине; при другой нагрузке они будут другими, и разбор причин —
+в `docs/BENCHMARKS.md`.

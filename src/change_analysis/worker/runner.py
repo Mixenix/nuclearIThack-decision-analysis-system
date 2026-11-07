@@ -113,9 +113,9 @@ class PipelineJob:
         return rows[0]
 
     def _apps(self, snapshot: dict[str, Any], *, require_complete: bool = True) -> list[dict[str, str]]:
-        dataset_root = Path(self.settings.dataset_root)
+        dataset_root = Path(snapshot.get("abs_root") or self.settings.dataset_root).resolve()
         root_ref = snapshot.get("dataset_root_ref") or snapshot.get("root_ref") or ""
-        run_dir = (dataset_root / root_ref).resolve() if root_ref else dataset_root.resolve()
+        run_dir = (dataset_root / root_ref).resolve() if root_ref else dataset_root
         before_dir = run_dir / snapshot["slices"]["BEFORE"]["dir"]
         after_dir = run_dir / snapshot["slices"]["AFTER"]["dir"]
         for path in (before_dir, after_dir):
@@ -544,13 +544,16 @@ class PipelineJob:
                 state = "DONE" if outcome["rows"] or not outcome["error"] else "ERROR"
                 cur.execute(
                     "INSERT INTO ca.check_executions (run_id, revision, check_id, label,"
-                    " source_kind, source_ref, params, state, duration_ms, row_count, error)"
-                    " VALUES (%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s,%s,%s) RETURNING id",
+                    " source_kind, source_ref, params, state, duration_ms, row_count,"
+                    " error, spec)"
+                    " VALUES (%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s,%s,%s,%s::jsonb)"
+                    " RETURNING id",
                     (self.run_id, revision, spec["id"], spec.get("label", ""),
                      spec.get("source_kind", "workspace"), spec.get("source_ref", ""),
                      json.dumps(spec.get("params") or {}), state,
                      outcome["duration_ms"], len(outcome["rows"]),
-                     outcome["error"][:4000] or None),
+                     outcome["error"][:4000] or None,
+                     json.dumps({**spec, "params": spec.get("params") or {}})),
                 )
                 execution_id = int(cur.fetchone()["id"])
                 for row in outcome["rows"]:

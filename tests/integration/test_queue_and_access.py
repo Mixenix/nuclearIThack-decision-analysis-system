@@ -104,6 +104,42 @@ def test_a_run_is_queued_with_its_full_snapshot(new_run, owner):
     assert run["expected_pairs"] > 0
 
 
+def test_a_procedure_can_be_replaced_through_configuration_only(new_run, owner,
+                                                                dataset_id):
+    """Приёмка: «может заменить выбранный обработчик без изменения кода приложения»."""
+    code = "# qa workspace aggregate\ndef run(context, inputs, params):\n    raise SystemExit('qa')\n"
+    procedure_id = procedures.save_procedure(
+        owner, "aggregate", "QA aggregate из рабочей области", "workspace", code=code)
+    try:
+        selections = {
+            "procedures": {
+                "normalize": procedures.default_selection("normalize"),
+                "compare": procedures.default_selection("compare"),
+                "aggregate": {"source": "workspace", "procedure_id": procedure_id,
+                              "params": {"dimensions": ["PATH"]}},
+            },
+        }
+        run_id = new_run(name="qa-workspace-procedure", selections=selections)
+        snapshot = runs.get_run(owner, run_id)["snapshot"]
+        aggregate = snapshot["procedures"]["aggregate"]
+        assert aggregate["source_kind"] == "workspace"
+        assert aggregate["source_ref"] == procedure_id
+        assert aggregate["code"] == code, "the workspace text is what will execute"
+        assert aggregate["params"] == {"dimensions": ["PATH"]}
+        # the other two stages still come from the registered files
+        assert snapshot["procedures"]["normalize"]["source_kind"] == "file"
+        assert snapshot["procedures"]["normalize"]["code"].strip()
+
+        # the frozen copy on the run is what the stage log points at
+        rows = query("SELECT stage, source_kind, source_ref, code_snapshot"
+                     " FROM ca.run_procedures WHERE run_id = %s ORDER BY stage", (run_id,))
+        by_stage = {row["stage"]: row for row in rows}
+        assert by_stage["aggregate"]["source_kind"] == "workspace"
+        assert by_stage["aggregate"]["code_snapshot"] == code
+    finally:
+        procedures.delete_procedure(owner, procedure_id)
+
+
 # ---------------------------------------------------------------------------
 # ownership: B must not read A's run, report, checks or export
 # ---------------------------------------------------------------------------

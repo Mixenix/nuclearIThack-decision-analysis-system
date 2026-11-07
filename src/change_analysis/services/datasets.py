@@ -15,18 +15,32 @@ def _root() -> Path:
     return Path(load_settings().dataset_root).resolve()
 
 
-def _safe_dir(root_ref: str) -> Path:
-    base = _root()
+def _root_for(abs_root: str | None) -> Path:
+    """The root a dataset was registered under, not whatever is configured now."""
+    return Path(abs_root).resolve() if abs_root else _root()
+
+
+def dataset_dir(row: dict[str, Any]) -> Path:
+    """Absolute directory of a registered dataset row (``abs_root`` + ``root_ref``)."""
+    base = _root_for(row.get("abs_root"))
+    candidate = (base / str(row["root_ref"])).resolve()
+    if candidate != base and base not in candidate.parents:
+        raise InvalidRequest(f"dataset path escapes its root: {row['root_ref']}")
+    return candidate
+
+
+def _safe_dir(root_ref: str, abs_root: str | None = None) -> Path:
+    base = _root_for(abs_root)
     candidate = (base / root_ref).resolve()
     if candidate != base and base not in candidate.parents:
         raise InvalidRequest(f"dataset path escapes DATASET_ROOT: {root_ref}")
     return candidate
 
 
-def precheck_dataset(root_ref: str) -> dict[str, Any]:
+def precheck_dataset(root_ref: str, abs_root: str | None = None) -> dict[str, Any]:
     """Everything the config page needs before a run: pairs, manifest diff, issues."""
     try:
-        run_dir = _safe_dir(root_ref)
+        run_dir = _safe_dir(root_ref, abs_root)
     except InvalidRequest as exc:
         return {"ok": False, "errors": [str(exc)], "warnings": [], "pairs": 0}
     manifest_path = run_dir / "manifest.json"
@@ -97,19 +111,21 @@ def register_dataset(owner_id: str, name: str, root_ref: str) -> str:
         raise InvalidRequest("; ".join(check["errors"]))
     with tx() as conn, conn.cursor() as cur:
         cur.execute(
-            "INSERT INTO ca.datasets (owner_id, name, root_ref, manifest, app_pairs)"
-            " VALUES (%s, %s, %s, %s::jsonb, %s)"
+            "INSERT INTO ca.datasets (owner_id, name, root_ref, abs_root, manifest, app_pairs)"
+            " VALUES (%s, %s, %s, %s, %s::jsonb, %s)"
             " ON CONFLICT (root_ref) DO UPDATE SET name = EXCLUDED.name,"
-            " manifest = EXCLUDED.manifest, app_pairs = EXCLUDED.app_pairs"
+            " abs_root = EXCLUDED.abs_root, manifest = EXCLUDED.manifest,"
+            " app_pairs = EXCLUDED.app_pairs"
             " RETURNING id",
-            (owner_id, name, root_ref, json.dumps(check["manifest"]), check["pairs"]),
+            (owner_id, name, root_ref, str(_root()), json.dumps(check["manifest"]),
+             check["pairs"]),
         )
         return str(cur.fetchone()["id"])
 
 
 def list_datasets(owner_id: str) -> list[dict[str, Any]]:
     rows = query(
-        "SELECT id, name, root_ref, app_pairs, shared, manifest, created_at"
+        "SELECT id, name, root_ref, abs_root, app_pairs, shared, manifest, created_at"
         " FROM ca.datasets WHERE owner_id = %s OR shared = true ORDER BY name",
         (owner_id,),
     )

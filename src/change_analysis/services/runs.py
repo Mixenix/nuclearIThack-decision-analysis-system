@@ -40,7 +40,7 @@ def create_run(
     idempotency_key: str | None = None,
 ) -> str:
     dataset = datasets.get_dataset(owner_id, dataset_id)
-    check = datasets.precheck_dataset(dataset["root_ref"])
+    check = datasets.precheck_dataset(dataset["root_ref"], dataset.get("abs_root"))
     if not check["ok"]:
         raise InvalidRequest("dataset precheck failed: " + "; ".join(check["errors"]))
     if backend not in ("cpu", "gpu"):
@@ -70,6 +70,7 @@ def create_run(
     snapshot = {
         "root_ref": dataset["root_ref"],
         "dataset_root_ref": dataset["root_ref"],
+        "abs_root": dataset.get("abs_root") or "",
         "slices": {
             "BEFORE": {"dir": (slices.get("BEFORE") or {}).get("dir"),
                        "label": (slices.get("BEFORE") or {}).get("label", "MASTER")},
@@ -117,6 +118,30 @@ def create_run(
                  spec["code"], json.dumps(spec["params"])),
             )
     return run_id
+
+
+def _published_check_set(run_id: str) -> list[dict[str, Any]]:
+    """The check specifications of the newest published report revision.
+
+    The published revision, not the run snapshot, is the authority on what has to
+    be republished — see migrations/0005.
+    """
+    rows = query(
+        "SELECT DISTINCT ON (check_id) check_id, spec FROM ca.check_executions"
+        " WHERE run_id = %s AND state <> 'RUNNING'"
+        " ORDER BY check_id, revision DESC", (run_id,))
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        spec = row.get("spec")
+        if not spec:
+            continue
+        out.append({"id": spec.get("id") or row["check_id"],
+                    "label": spec.get("label", ""),
+                    "code": spec.get("code", ""),
+                    "params": spec.get("params") or {},
+                    "source_kind": spec.get("source_kind", "workspace"),
+                    "source_ref": spec.get("source_ref", "")})
+    return out
 
 
 def list_runs(owner_id: str, limit: int = 100) -> list[dict[str, Any]]:
@@ -208,7 +233,10 @@ def request_checks_only(
         raise InvalidRequest("checks can only be re-run on a finished run")
     snapshot = dict(run["snapshot"] or {})
     added = procedures.resolve_checks(owner_id, list(check_selections))
-    existing = {c["id"]: c for c in (snapshot.get("checks") or [])}
+    existing = {c["id"]: c for c in _published_check_set(run_id)}
+    if not existing:
+        # nothing published yet (or an old run): fall back to the snapshot
+        existing = {c["id"]: c for c in (snapshot.get("checks") or [])}
     for spec in added:
         existing[spec["id"]] = spec          # same id replaces, never duplicates
     snapshot["checks"] = list(existing.values())

@@ -64,6 +64,21 @@ def test_the_stage_log_names_the_code_that_actually_ran(completed_run, owner):
         assert row["code_changed_since_run"] is False
 
 
+def test_every_stage_reports_real_progress(completed_run, owner):
+    """«прогресс виден, понятно, что происходит»: counters are filled, not zero."""
+    stages = runs.run_stages(owner, completed_run["run_id"])
+    done = [stage for stage in stages if stage["state"] == "DONE"]
+    assert len(done) >= 3
+    for stage in done:
+        assert stage["progress_total"] > 0, f"{stage['stage']} reports no total"
+        assert stage["progress_done"] > 0, f"{stage['stage']} reports no progress"
+        assert stage["progress_done"] <= stage["progress_total"] * 1.0 or \
+            stage["stage"] == "aggregate", (
+                "the aggregate stage counts comparison rows, which exceeds the "
+                "pair total on purpose (pages_run.py documents this)"
+            )
+
+
 def test_the_event_log_is_ordered_and_complete(completed_run, owner):
     events = runs.run_events(owner, completed_run["run_id"], limit=500)
     assert events
@@ -125,8 +140,10 @@ def test_low_confidence_is_distinguishable_from_high_without_colour(synthetic_ru
                               "errors": 0}
     html = read_html(report.export_html(owner, run_id))
     assert html.count("FAIL · низкая уверенность") == 1
-    assert html.count("fail-low") == 1
-    assert html.count("fail-high") == 1
+    # the class is checked on the table row, not on the stylesheet (which also
+    # mentions the selector)
+    assert html.count('<tr class="fail-low">') == 1
+    assert html.count('<tr class="fail-high">') == 1
     assert "Срабатывания проверок (HIGH / LOW)" in html
 
 

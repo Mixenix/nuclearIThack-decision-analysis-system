@@ -18,6 +18,7 @@ import pytest
 from change_analysis.checks.loader import list_builtin_checks
 from change_analysis.contracts.types import FilterSpec
 from change_analysis.db.connection import query
+from change_analysis.services import checks as checks_service
 from change_analysis.services import procedures, report, runs
 from change_analysis.services.errors import InvalidRequest
 from change_analysis.worker.runner import PipelineJob, run_checks_only
@@ -107,7 +108,7 @@ def finished_run_with_checks(synthetic_run, settings, owner):
 
 
 def report_signature(run_id, owner):
-    view = report.check_report(owner, run_id, revision=1)
+    view = checks_service.check_report(owner, run_id, revision=1)
     return sorted((row["check_id"], row["LABEL"], row["ARGUMENT"], row["CNT"],
                    row["RESULT"]) for row in view["rows"])
 
@@ -158,13 +159,14 @@ def test_checks_only_does_not_recompute_the_mart(finished_run_with_checks, owner
 def test_checks_only_adds_the_new_check_to_the_same_report(finished_run_with_checks,
                                                            owner, settings):
     run_id = finished_run_with_checks["run_id"]
-    before = {row["check_id"] for row in report.check_report(owner, run_id, revision=1)["rows"]}
+    before = {row["check_id"]
+              for row in checks_service.check_report(owner, run_id, revision=1)["rows"]}
 
     procedure_id, _ = apply_new_check(owner, run_id, settings)
 
     revision = query("SELECT revision FROM ca.runs WHERE id = %s", (run_id,))[0]["revision"]
     assert revision == 2, "publishing a new report must bump the revision"
-    after = report.check_report(owner, run_id, revision=2)
+    after = checks_service.check_report(owner, run_id, revision=2)
     check_ids = {row["check_id"] for row in after["rows"]}
     assert f"proc:{procedure_id}" in check_ids
     assert before, "the run must have published the delivered checks first"
@@ -191,6 +193,11 @@ def test_checks_only_keeps_the_results_of_the_checks_run_before(finished_run_wit
         f"{len(missing)} previously published check rows disappeared from revision 1: "
         f"{missing[:3]}"
     )
+    # and the new revision repeats the whole configured set, not only the new check
+    revision = query("SELECT revision FROM ca.runs WHERE id = %s", (run_id,))[0]["revision"]
+    assert revision == 2
+    republished = checks_service.check_report(owner, run_id, revision=2)
+    assert {row["check_id"] for row in republished["rows"]} >= {row[0] for row in before}
 
 
 def test_checks_only_keeps_the_pivot_and_the_summary(finished_run_with_checks, owner,
@@ -215,3 +222,37 @@ def test_checks_only_is_refused_on_a_run_that_has_not_finished(synthetic_run, ow
     run_id = synthetic_run(name="qa-queued-checks", state="QUEUED")
     with pytest.raises(InvalidRequest):
         runs.request_checks_only(owner, run_id, [])
+
+
+def test_a_second_checks_only_does_not_drift(finished_run_with_checks, owner, settings):
+    """Two CHECKS_ONLY jobs in a row: ``revision`` moves, ``data_revision`` must not."""
+    run_id = finished_run_with_checks["run_id"]
+    spec = FilterSpec(run_id=run_id)
+    pivot_before = report.pivot(owner, run_id, ["CLASS"], [], spec)["grand_total"]
+    summary_before = report.summary(owner, run_id, spec)["total_pairs"]
+    data_revision_before = query("SELECT data_revision FROM ca.runs WHERE id = %s",
+                                 (run_id,))[0]["data_revision"]
+
+    apply_new_check(owner, run_id, settings)
+    apply_new_check(owner, run_id, settings)
+
+    row = query("SELECT revision, data_revision FROM ca.runs WHERE id = %s", (run_id,))[0]
+    assert row["revision"] == 3, "each published report is a new revision"
+    assert row["data_revision"] == data_revision_before, (
+        "the datamart revision must not move when only checks are republished"
+    )
+    assert report.pivot(owner, run_id, ["CLASS"], [], spec)["grand_total"] == pivot_before
+    assert report.summary(owner, run_id, spec)["total_pairs"] == summary_before
+
+    # both earlier revisions stay readable
+    for revision in (1, 2):
+        view = checks_service.check_report(owner, run_id, revision=revision)
+        assert view["rows"], f"revision {revision} lost its rows"
+        ids = [(r["check_id"], r["ARGUMENT"]) for r in view["rows"]]
+        assert len(ids) == len(set(ids))
+    # the latest revision repeats the whole configured set
+    latest = checks_service.check_report(owner, run_id, revision=3)
+    assert {r["check_id"] for r in latest["rows"]} >= {
+        r["check_id"] for r in checks_service.check_report(owner, run_id, revision=1)["rows"]
+    }
+    assert len(latest["rows"]) == len({(r["check_id"], r["ARGUMENT"]) for r in latest["rows"]})

@@ -10,7 +10,6 @@ from nicegui import run as background, ui
 from ..checks.loader import list_builtin_checks
 from ..llm import adapter as llm
 from ..reports.export import is_safe_app_id
-from ..services import checks as checks_service
 from ..services import report as report_service
 from ..services import runs
 from ..services.errors import AccessDenied
@@ -73,8 +72,11 @@ def report_page(run_id: str, revision: int | None = None) -> None:
         revision = int(view["revision"])
         revision_badge.set_text(f"ревизия {revision}")
         if int(run["revision"]) > revision:
-            ui.label(f"Показана ревизия {revision}, идёт публикация ревизии "
-                     f"{run['revision']}.").classes("text-sm text-amber-700")
+            latest = report_service.published_check_report(owner, run_id)
+            pending = int(latest["revision"]) < int(run["revision"])
+            ui.label(f"Показана ревизия {revision}, "
+                     + ("идёт публикация ревизии " if pending else "доступна ревизия ")
+                     + f"{run['revision']}.").classes("text-sm text-amber-700")
         rows = view["rows"]
         failures = [r for r in rows if r["RESULT"] == "FAIL"]
         technical = view["errors"]

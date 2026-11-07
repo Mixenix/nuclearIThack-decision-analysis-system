@@ -25,7 +25,6 @@ from markupsafe import escape
 from ..contracts.types import FilterSpec
 from ..db.connection import query
 from ..llm.adapter import config_digest, load_report
-from ..services.checks import build_check_report
 from ..services.errors import InvalidRequest, NotFound
 from .summary import CAUSE_LABEL, build_summary
 
