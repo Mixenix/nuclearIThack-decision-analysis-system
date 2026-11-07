@@ -58,7 +58,13 @@ def canonical() -> dict[str, str]:
                 " WHERE summary->>'decision_changed' IS NOT NULL"
                 " ORDER BY created_at DESC LIMIT 1")
     normalized = one(f"SELECT count(*) FROM ca.normalized_rows WHERE run_id = {latest}")
-    checks = one(f"SELECT count(*) FROM ca.check_results WHERE run_id = {latest}")
+    # "rows in the report" is what the report actually shows: the published
+    # revision, not every row ever written for this run.
+    checks = one("SELECT count(*) FROM ca.check_results WHERE run_id = " + latest +
+                 " AND revision = (SELECT max(revision) FROM ca.check_results"
+                 f" WHERE run_id = {latest})")
+    if checks == "0":  # no published revision yet: fall back to the run snapshot
+        checks = one(f"SELECT count(*) FROM ca.check_results WHERE run_id = {latest}")
     holdout_pairs = one("SELECT summary->>'pairs' FROM ca.runs WHERE summary->>'pairs' = '998'"
                         " ORDER BY created_at DESC LIMIT 1")
     holdout_changed = one("SELECT summary->>'changed' FROM ca.runs"
