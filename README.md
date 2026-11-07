@@ -212,10 +212,13 @@ psycopg-pool 3.3.3, pandas 3.1.1, jinja2 3.1.6. GPU-режим на этой м�
 
 ## 3. Установка (одна машина, без контейнеров)
 
-Все команды ниже выполняются **из корня проекта `app/`**.
+Репозиторий — это и есть корень приложения: после `git clone` все команды ниже
+выполняются из него, без дополнительных `cd`.
 
 ```bash
-cd /home/mixantax/nuclearIThackWorkingDir/app
+# из корня клонированного репозитория
+git clone https://github.com/Mixenix/nuclearIThack-decision-analysis-system.git spr
+cd spr
 python3 -m venv .venv
 .venv/bin/pip install --upgrade pip
 .venv/bin/pip install \
