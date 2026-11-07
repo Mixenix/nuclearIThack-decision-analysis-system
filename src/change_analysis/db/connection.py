@@ -7,6 +7,7 @@ comparison rows).  See docs/CONTRACTS.md §2.
 
 from __future__ import annotations
 
+import atexit
 import contextlib
 from typing import Any, Iterable, Iterator, Sequence
 
@@ -29,6 +30,11 @@ def get_pool() -> ConnectionPool:
     is enough and keeps the connection count predictable."""
     global _POOL
     if _POOL is None:
+        # Close the pool before the interpreter starts tearing threads down:
+        # otherwise every CLI invocation ends with a noisy
+        # ``PythonFinalizationError: cannot join thread`` from the pool's
+        # destructor, which looks like a crash in logs and demos.
+        atexit.register(close_pool)
         _POOL = ConnectionPool(
             conninfo=dsn(),
             min_size=1,
