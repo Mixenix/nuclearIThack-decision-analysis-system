@@ -14,6 +14,7 @@ from nicegui import run as background, ui
 
 from ..checks.loader import list_builtin_checks
 from ..services import procedures, report as report_service, runs
+from ..services import workspace as workspace_service
 from . import workspace_examples
 from . import layout, session
 
@@ -183,25 +184,18 @@ def workspace_page(procedure_id: str | None = None, stage: str | None = None,
 
     def validate_contract() -> None:
         output.clear()
-        # Parsing must never import or execute user Python in the web process.
-        import ast
-
-        try:
-            tree = ast.parse(editor.value or "")
-            export = "CHECK" if stage_select.value == "check" else "PROCEDURE"
-            names = {target.id for node in tree.body if isinstance(node, ast.Assign)
-                     for target in node.targets if isinstance(target, ast.Name)}
-            if export not in names:
-                raise ValueError(f"Ожидается объявление {export} = {{...}}")
-        except (SyntaxError, ValueError) as exc:
-            with output:
-                layout.error_box(f"Ошибка синтаксиса или объявления: {exc}")
-            return
+        # Никакого импорта и исполнения: только разбор AST (см. services/workspace.py).
+        verdict = workspace_service.validate_code(editor.value or "", stage_select.value or "")
         with output:
-            ui.label(f"Синтаксис корректен; найдено объявление {export}.").classes(
-                "text-green-700 text-sm")
-            ui.label("Импорт, контракт и выполнение проверит воркер при запуске.").classes(
-                "text-xs text-slate-500")
+            if verdict["ok"]:
+                ui.label(f"Контракт в порядке: {verdict['message']}").classes(
+                    "text-green-700 text-sm")
+                if verdict.get("hint"):
+                    ui.label(verdict["hint"]).classes("text-xs text-slate-500")
+            else:
+                layout.error_box(f"Контракт нарушен: {verdict['message']}")
+                if verdict.get("hint"):
+                    ui.label(verdict["hint"]).classes("text-xs text-slate-500")
 
     def save() -> str | None:
         try:

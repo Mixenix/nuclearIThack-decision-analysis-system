@@ -227,35 +227,71 @@ def read_document(path: Path) -> dict:
 ''',
     },
     {
-        "key": "normalize_params",
+        "key": "normalize_custom_rules",
         "title": "Процедура нормализации: свои правила",
         "stage": "normalize",
-        "about": ("Не код, а параметры: что исключать и какие массивы сопоставлять по ключу, "
-                  "а какие по индексу. Их же можно править на странице конфигурации."),
+        "about": ("Готовая процедура нормализации, которая берёт поставленную и добавляет "
+                  "свои исключения, режимы массивов и бакеты. Отсюда видно, где менять "
+                  "правила разбора: в параметрах, а не в коде приложения."),
         "params": {
             "excluded_paths": ["appData.request_id", "appData.createDateTime",
                                "appData.sessionId"],
             "max_errors_reported": 20,
         },
         "code": '''# -*- coding: utf-8 -*-
-"""Параметры процедуры нормализации: здесь показаны только те, что чаще меняют.
+"""Своя нормализация: оборачивает поставленную процедуру и меняет её параметры.
 
-excluded_paths — технические поля, которые различаются у всех заявок и только
-создают шум: время, идентификаторы запроса, номер сессии.
+Так делается любая правка разбора без вмешательства в приложение:
 
-arrays — как сопоставлять массивы между срезами:
-  mode="field"  + key_fields — элемент опознаётся по значению поля (product_id);
-  mode="value"               — элемент опознаётся по собственному значению (списки);
-  mode="index"               — порядок значим (векторы чисел).
+* excluded_paths — технические поля, которые различаются у всех заявок (время,
+  идентификатор запроса, номер сессии) и только создают шум;
+* arrays — как сопоставлять массивы: mode="field" + key_fields (по значению поля),
+  mode="value" (по собственному значению), mode="index" (порядок значим);
+* buckets — необязательная группировка чисел в интервалы для отчёта; на признак
+  различия не влияет, он всегда считается по исходному значению.
 
-buckets — необязательная группировка чисел в интервалы для отчёта. На признак
-различия не влияет: он всегда считается по исходному значению.
-
-max_errors_reported — сколько ошибок чтения показать, прежде чем свернуть список
-(хотя бы одна ошибка показывается всегда).
+Свои правила удобнее держать в DEFAULTS: они попадают в снимок прогона вместе с кодом,
+поэтому прогон всегда можно воспроизвести.
 """
 
-EXCLUDED_EXAMPLE = "appData.request_id"
+from change_analysis.procedures.spr_normalize import DEFAULTS as BASE
+from change_analysis.procedures.spr_normalize import run as normalize
+
+DEFAULTS = {
+    "excluded_paths": ["appData.request_id", "appData.createDateTime",
+                       "appData.sessionId"],
+    "max_errors_reported": 20,
+}
+
+EXTRA_ARRAYS = [
+    {"path": "decisionResult.available_offers", "mode": "field",
+     "key_fields": ["product_id", "type"]},
+    {"path": "decisionResult.product_trials", "mode": "field",
+     "key_fields": ["product_id"]},
+    {"path": "decisionResult.product_trials.rules", "mode": "field",
+     "key_fields": ["name"]},
+]
+
+
+def _params(params):
+    merged = {**BASE, **DEFAULTS, **(params or {})}
+    arrays = {item["path"]: item for item in BASE.get("arrays", [])}
+    for item in EXTRA_ARRAYS:
+        arrays[item["path"]] = item
+    merged["arrays"] = list(arrays.values())
+    return merged
+
+
+def run(context, inputs, params):
+    return normalize(context, inputs, _params(params))
+
+
+PROCEDURE = {"id": "spr_normalize_custom",
+             "label": "СПР: нормализация с моими правилами",
+             "stage": "normalize",
+             "contract_version": 1,
+             "params": DEFAULTS,
+             "entrypoint": run}
 ''',
     },
 ]

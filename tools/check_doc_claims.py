@@ -93,12 +93,12 @@ CLAIMS: list[tuple[str, str, str]] = [
     ("README.md", "checks", "| Строк в отчёте проверок | **{checks}**"),
     ("README.md", "holdout_changed", "**{holdout_changed}** различий"),
     ("README.md", "holdout_flips", "**{holdout_flips}** смен решения"),
-    ("README.md", "tests", "**{tests} тестов**"),
+    ("README.md", "tests", r"\*\*{tests}\s+тест"),
     ("README.md", "pairs", "**{pairs} пары**"),
     ("CONTRIBUTING.md", "pairs", "**{pairs} пары"),
     ("CONTRIBUTING.md", "changed", "**{changed} заявки с различиями"),
     ("CONTRIBUTING.md", "flips", "{flips} со сменой решения"),
-    ("CONTRIBUTING.md", "tests", "{tests} тестов"),
+    ("CONTRIBUTING.md", "tests", r"{tests}\s+тест"),
     ("docs/STATUS.md", "tests", "**{tests} passed, 0 failed**"),
     ("docs/BENCHMARKS.md", "normalized", "{normalized} строк"),
     ("docs/ARCHITECTURE_NOTE.md", "normalized", "{normalized} строк"),
@@ -132,7 +132,13 @@ def main() -> int:
             continue
         wanted = template.format(**values)
         checked += 1
-        if wanted not in doc.read_text(encoding="utf-8"):
+        text = doc.read_text(encoding="utf-8")
+        found = wanted in text
+        if not found and any(ch in wanted for ch in "*\\d[]()?"):
+            # шаблон с метасимволами: ищем как регулярное выражение (нужно для
+            # русских склонений — «384 теста», «345 тестов»)
+            found = re.search(wanted, text) is not None
+        if not found:
             problems.append(f"{rel}: не найдено «{wanted}»  (проверяем {slot})")
 
     stale_hits: list[str] = []

@@ -223,6 +223,13 @@ def save_procedure(owner_id: str, stage: str, name: str, source_kind: str,
                    procedure_id: str | None = None) -> str:
     if stage not in PROCEDURE_STAGES + ("check",):
         raise InvalidRequest(f"unknown stage {stage!r}")
+    if code is not None:
+        # Контракт проверяется и здесь, а не только кнопкой в интерфейсе: браузер можно
+        # обойти, а сохранённый «почти правильный» код упадёт позже в воркере.
+        from .workspace import validate_code
+        verdict = validate_code(code, stage)
+        if not verdict["ok"]:
+            raise InvalidRequest(f"контракт нарушен: {verdict['message']}")
     payload = json.dumps(params or {})
     with tx() as conn, conn.cursor() as cur:
         if procedure_id:

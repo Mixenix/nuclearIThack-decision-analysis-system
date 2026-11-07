@@ -57,7 +57,7 @@ src/change_analysis/
   reports/{summary,export}.py   сводка и HTML-отчёт
   llm/adapter.py            независимое мнение ИИ (DeepSeek), ограниченный payload
   templates/report.html.j2  автономный HTML (inline CSS, без CDN)
-tests/{unit,integration,e2e} автотесты (345 тестов)
+tests/{unit,integration,e2e} автотесты (384 теста)
 tools/                      bench_report.py, acceptance_ui.py, validate_against_reference.py
 docs/                       CONTRACTS, STATUS, BENCHMARKS, DEMO, DECISIONS, ARCHITECTURE_NOTE
 ```

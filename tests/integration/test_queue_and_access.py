@@ -107,7 +107,10 @@ def test_a_run_is_queued_with_its_full_snapshot(new_run, owner):
 def test_a_procedure_can_be_replaced_through_configuration_only(new_run, owner,
                                                                 dataset_id):
     """Приёмка: «может заменить выбранный обработчик без изменения кода приложения»."""
-    code = "# qa workspace aggregate\ndef run(context, inputs, params):\n    raise SystemExit('qa')\n"
+    # Контракт проверяется сервером при сохранении, поэтому код объявляет PROCEDURE.
+    code = ("def run(context, inputs, params):\n    raise SystemExit('qa')\n"
+            "PROCEDURE = {'id': 'qa_aggregate', 'stage': 'aggregate',"
+            " 'params': {}, 'entrypoint': run}\n")
     procedure_id = procedures.save_procedure(
         owner, "aggregate", "QA aggregate из рабочей области", "workspace", code=code)
     try:
@@ -223,8 +226,12 @@ def test_procedures_are_owned(owner, other_owner):
         with pytest.raises(NotFound):
             procedures.get_procedure(other_owner, procedure_id)
         with pytest.raises(NotFound):
-            procedures.save_procedure(other_owner, "check", "hijack", "workspace",
-                                      code="x = 1", procedure_id=procedure_id)
+            procedures.save_procedure(
+                other_owner, "check", "hijack", "workspace",
+                code="def run(mart, params=None):\n    return []\n"
+                     "CHECK = {'id': 'hijack', 'label': 'hijack', 'params': {},"
+                     " 'entrypoint': run}\n",
+                procedure_id=procedure_id)
     finally:
         procedures.delete_procedure(owner, procedure_id)
 
