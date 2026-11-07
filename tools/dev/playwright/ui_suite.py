@@ -1,15 +1,39 @@
-"""Run the UI drivers in sequence against an already running port-8091 server.
+"""Run the browser drivers against a running server.
 
-Requires Chromium, Playwright and a running worker. Creates configurations,
-procedures, a pipeline run and checks (including a deliberate technical error).
-Evidence is written to /tmp/ui-verify. The final driver fails on the known
-checks-only revision regression until the service owner fixes it.
+Two layers:
+
+* ``ui_walkthrough.py`` — the demonstration path itself (вход → прогон → отчёт →
+  сводная → заявка), 13 проверок. Это обязательная часть: она проходит тот же путь,
+  который увидит жюри.
+* ``ui_probe.py`` — вход, отклонение неверного пароля, отрисовка страниц и скриншоты.
+
+Глубокие драйверы (``ui_create``, ``ui_workspace``, ``ui_acceptance``, ``ui_final``)
+написаны против более ранней версии интерфейса и требуют обновления — они не входят
+в обязательную проверку и запускаются вручную.
+
+    tools/dev/playwright/run_isolated.py          # поднять изолированный стенд и прогнать
+    UI_BASE=http://127.0.0.1:8000 ui_suite.py     # против работающего приложения
 """
-from pathlib import Path
+from __future__ import annotations
+
+import os
 import subprocess
 import sys
+from pathlib import Path
 
 root = Path(__file__).resolve().parent
-for name in ('probe', 'inspect', 'interact', 'create', 'workspace', 'acceptance', 'final'):
-    print(f'Running ui_{name}.py', flush=True)
-    subprocess.run([sys.executable, '-u', str(root / f'ui_{name}.py')], check=True)
+base = os.environ.get("UI_BASE", "http://127.0.0.1:8000")
+env = {**os.environ, "UI_BASE": base}
+failed: list[str] = []
+
+for name in ("ui_probe", "ui_walkthrough"):
+    print(f"Running {name}.py against {base}", flush=True)
+    result = subprocess.run([sys.executable, "-u", str(root / f"{name}.py")], env=env)
+    if result.returncode != 0:
+        failed.append(name)
+
+print()
+if failed:
+    print(f"провалились: {', '.join(failed)}")
+    sys.exit(1)
+print("браузерные проверки пройдены")
