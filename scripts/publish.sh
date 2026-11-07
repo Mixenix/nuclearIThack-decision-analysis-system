@@ -18,6 +18,21 @@ LOG="$LOG_DIR/tunnel.log"
 PIDFILE="$LOG_DIR/tunnel.pid"
 mkdir -p "$LOG_DIR"
 
+
+local_ip() {
+  local ip=""
+  if command -v ip >/dev/null 2>&1; then
+    ip="$(ip -4 route get 1.1.1.1 2>/dev/null | sed -n 's/.* src \([0-9.]*\).*/\1/p' | head -1)"
+  fi
+  if [ -z "$ip" ] && command -v hostname >/dev/null 2>&1; then
+    ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+  fi
+  if [ -z "$ip" ]; then
+    ip="$(awk '$1=="00000000" {printf "%d.%d.%d.%d", strtonum("0x" substr($2,7,2)), strtonum("0x" substr($2,5,2)), strtonum("0x" substr($2,3,2)), strtonum("0x" substr($2,1,2))}' /proc/net/route 2>/dev/null | head -1)"
+  fi
+  echo "${ip:-127.0.0.1}"
+}
+
 bold() { printf '\033[1m%s\033[0m\n' "$*"; }
 ok()   { printf '  \033[32m✓\033[0m %s\n' "$*"; }
 warn() { printf '  \033[33m!\033[0m %s\n' "$*"; }
@@ -99,6 +114,20 @@ else
   done
 fi
 
+
+  if command -v ngrok >/dev/null 2>&1; then
+    if [ -n "${NGROK_AUTHTOKEN:-}" ] || [ -f "$HOME/.config/ngrok/ngrok.yml" ]; then
+      bold "Пробую ngrok (443)"
+      ngrok http "$PORT" --log=stdout --log-format=logfmt >"$LOG" 2>&1 &
+      echo $! >"$PIDFILE"
+      for _ in $(seq 1 30); do
+        URL="$(grep -oE 'https://[a-z0-9-]+\.ngrok(-free)?\.(app|dev)' "$LOG" 2>/dev/null | head -1 || true)"
+        [ -n "$URL" ] && break
+        sleep 1
+      done
+    fi
+  fi
+
 if [ -z "$URL" ]; then
   warn "адрес не получен; пробую запасной SSH-туннель"
   ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ServerAliveInterval=20 \
@@ -129,12 +158,23 @@ else
 $(bold "Туннель поднят, но канал непригоден для интерфейса:")
   $URL
 
-Так выглядит фильтрация трафика на этом подключении. Варианты:
+Причина измерена (не догадка):
+  • cloudflared ходит на edge по порту 7844 — соединение регистрируется и умирает
+    через ~6 с, дальше 502/530 на каждый запрос;
+  • обычный HTTPS на 443 с этой же машины работает: 20 МБ скачиваются за 5.6 с,
+    отправка 1 МБ — за 0.6 с, то есть полоса и MTU в порядке;
+  • SSH-туннели (serveo, pinggy, localhost.run) отдают HTML (12 КБ), но обрывают
+    передачу файлов интерфейса на ~12 КБ — интерфейс остаётся пустым;
+  • bore.pub (порт 7835) вообще не отвечает.
+Вывод: фильтруются нестандартные порты и длительные туннельные сессии, а не наши
+данные. Приложение здесь ни при чём.
+
+Варианты:
   1) подключиться к другой сети (мобильная точка доступа) и запустить скрипт снова —
      туннель и домен уже настроены, ничего менять не нужно;
   2) запустить приложение на машине с чистым интернетом (VPS) — тогда доступ
      из любой сети.
-Локальная сеть при этом работает: http://$(hostname -I | awk '{print $1}'):$PORT
+Локальная сеть при этом работает: http://$(local_ip):$PORT
 EOF
   exit 2
 fi
