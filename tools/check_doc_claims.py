@@ -46,24 +46,24 @@ def canonical() -> dict[str, str]:
     def spaced(value: str) -> str:
         return f"{int(value):,}".replace(",", " ") if value.isdigit() else value
 
-    latest = ("(SELECT id FROM ca.runs WHERE summary->>'pairs' IS NOT NULL"
-              " ORDER BY created_at DESC LIMIT 1)")
-    pairs = one("SELECT summary->>'pairs' FROM ca.runs WHERE summary->>'pairs' IS NOT NULL"
+    # Открытая часть — строго прогон на 2002 пары. Раньше здесь брался «последний
+    # прогон с числами», и после появления отложенного прогона проверка молча
+    # сравнивала документацию с 998 парами.
+    OPEN = "summary->>'pairs' = '2002'"
+    latest = f"(SELECT id FROM ca.runs WHERE {OPEN} ORDER BY created_at DESC LIMIT 1)"
+    pairs = one(f"SELECT summary->>'pairs' FROM ca.runs WHERE {OPEN}"
                 " ORDER BY created_at DESC LIMIT 1")
-    rows = one("SELECT summary->>'rows' FROM ca.runs WHERE summary->>'rows' IS NOT NULL"
+    rows = one(f"SELECT summary->>'rows' FROM ca.runs WHERE {OPEN} AND summary->>'rows' IS NOT NULL"
                " ORDER BY created_at DESC LIMIT 1")
-    changed = one("SELECT summary->>'changed' FROM ca.runs WHERE summary->>'changed' IS NOT NULL"
+    changed = one(f"SELECT summary->>'changed' FROM ca.runs WHERE {OPEN}"
                   " ORDER BY created_at DESC LIMIT 1")
-    flips = one("SELECT summary->>'decision_changed' FROM ca.runs"
-                " WHERE summary->>'decision_changed' IS NOT NULL"
+    flips = one(f"SELECT summary->>'decision_changed' FROM ca.runs WHERE {OPEN}"
                 " ORDER BY created_at DESC LIMIT 1")
     normalized = one(f"SELECT count(*) FROM ca.normalized_rows WHERE run_id = {latest}")
-    # "rows in the report" is what the report actually shows: the published
-    # revision, not every row ever written for this run.
     checks = one("SELECT count(*) FROM ca.check_results WHERE run_id = " + latest +
                  " AND revision = (SELECT max(revision) FROM ca.check_results"
-                 f" WHERE run_id = {latest})")
-    if checks == "0":  # no published revision yet: fall back to the run snapshot
+                 " WHERE run_id = " + latest + ")")
+    if not checks:
         checks = one(f"SELECT count(*) FROM ca.check_results WHERE run_id = {latest}")
     holdout_pairs = one("SELECT summary->>'pairs' FROM ca.runs WHERE summary->>'pairs' = '998'"
                         " ORDER BY created_at DESC LIMIT 1")
