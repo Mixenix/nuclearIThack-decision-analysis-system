@@ -95,9 +95,14 @@ def read_document(path: Path, params: dict | None = None) -> dict:
         elif kind == "xml":
             from change_analysis.procedures.spr_normalize_xml import read_document as read_xml
             value = read_xml(path)
+        elif kind == "auto":
+            # все поддерживаемые форматы: JSON, JSONL, XML, YAML, TOML, INI,
+            # .properties, CSV/TSV, архивы и сжатые варианты
+            from change_analysis.procedures import spr_formats
+            value = spr_formats.read_any(path)
         else:
-            raise ValueError(f"Unknown input format {kind!r} for {path.name}; "
-                             "select a custom .py reader from SCRIPT_ROOT")
+            from change_analysis.procedures import spr_formats
+            value = spr_formats.read_any(path.with_suffix("." + kind))
     if not isinstance(value, dict):
         raise ValueError(f"reader must return a dict: {path}")
     return value

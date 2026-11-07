@@ -14,6 +14,7 @@ from nicegui import run as background, ui
 
 from ..checks.loader import list_builtin_checks
 from ..services import procedures, report as report_service, runs
+from . import workspace_examples
 from . import layout, session
 
 CHECK_TEMPLATE = '''# -*- coding: utf-8 -*-
@@ -128,6 +129,29 @@ def workspace_page(procedure_id: str | None = None, stage: str | None = None,
                     .style("height: 46vh; border: 1px solid #cbd5e1")
                 params_input = ui.input("Параметры (JSON)", value=initial_params).props(
                     "outlined dense").classes("w-full")
+
+                with ui.expansion("Готовые примеры", icon="lightbulb",
+                                  value=False).classes("w-full"):
+                    ui.label("Проверены запуском на демонстрационном прогоне "
+                             "(2 002 пары, 502 различия, 385 смен решения). Нажмите, "
+                             "чтобы подставить в редактор, дальше меняйте как свой."
+                             ).classes("text-xs text-slate-500 mb-1")
+
+                    def apply_example(example) -> None:
+                        editor.value = example["code"]
+                        stage_select.value = example["stage"]
+                        params_input.value = json.dumps(example["params"],
+                                                        ensure_ascii=False)
+                        if not (name_input.value or "").strip():
+                            name_input.value = example["title"].split(": ", 1)[-1]
+                        status_label.set_text(f"пример: {example['title']} — не забудьте сохранить")
+
+                    for example in workspace_examples.EXAMPLES:
+                        with ui.row().classes("items-start gap-2 w-full no-wrap"):
+                            ui.button(example["title"],
+                                      on_click=lambda e=example: apply_example(e)) \
+                                .props("outline dense").classes("shrink-0")
+                            ui.label(example["about"]).classes("text-xs text-slate-500")
 
                 with ui.row().classes("gap-2 items-center"):
                     ui.button("Проверить контракт", icon="rule",

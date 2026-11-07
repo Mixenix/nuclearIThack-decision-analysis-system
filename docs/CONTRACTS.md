@@ -275,3 +275,25 @@ def run(context, inputs, params): ...
   not have a role for our user. `DATABASE_URL` is in `.env.example`.
 * GPU: NVIDIA GTX 1650 Ti, 4 GB — cudf is **not** installed yet; the GPU path is
   a measured experiment, never a claim. CPU is the required mode.
+
+## Чтение входных данных: какие форматы обязан понимать поставляемый ридер
+
+Формат — свойство датасета (`file_glob`), а не приложения. Поставляемая процедура
+нормализации понимает `.json`, `.jsonl`, `.ndjson`, `.xml`, `.yaml`, `.yml`, `.toml`,
+`.ini`, `.cfg`, `.conf`, `.properties`, `.csv`, `.tsv` и прозрачно снимает `.zip`,
+`.gz`, `.bz2`, `.xz`.
+
+Правила:
+
+* корень документа — объект (словарь); иначе `ValueError` с указанием семейства;
+* полную структуру сохраняют JSON, JSONL, XML, YAML и архивы; TOML/INI/properties/CSV
+  дают скаляры и вложенные объекты, `null` в них становится пустой строкой;
+* `.jsonl` и CSV со многими строками возвращают `{"_documents": [...]}` — процедура
+  берёт первый документ и пишет предупреждение, чтобы это не прошло незамеченным;
+* APP_ID — имя файла без учёта составных расширений (`I1.json.gz` → `I1`);
+* неизвестное расширение — ошибка с перечнем поддерживаемых и напоминанием про
+  собственный ридер `read_document(path)`.
+
+Реализация: `src/change_analysis/procedures/spr_formats.py`,
+тесты: `tests/unit/test_multi_format_readers.py`.
+

@@ -68,7 +68,8 @@ def configs_page(config_id: str | None = None) -> None:
         precheck_box = ui.column().classes("w-full gap-1")
         normalize_params = ((selections.get("procedures") or {}).get("normalize") or {}).get("params") or {}
         input_format = ui.select(
-            {"auto": "Авто: JSON / XML по расширению", "json": "JSON", "xml": "XML",
+            {"auto": "Авто: любой поддерживаемый формат по расширению",
+             "json": "JSON", "xml": "XML",
              "custom": "Свой .py-ридер из SCRIPT_ROOT"}, label="Входной формат",
             value="custom" if normalize_params.get("reader_ref") else normalize_params.get("input_format", "auto"),
         ).props("outlined dense").classes("w-full")
@@ -90,7 +91,7 @@ def configs_page(config_id: str | None = None) -> None:
                 with precheck_box:
                     layout.error_box(f"Датасет недоступен: {exc}")
                 return
-            glob_input.set_value(dataset.get("file_glob", "*.json"))
+            glob_input.set_value(dataset.get("file_glob", datasets.DEFAULT_FILE_GLOB))
             check = datasets.precheck_dataset(dataset["root_ref"], dataset.get("abs_root"), glob_input.value)
             with precheck_box:
                 with ui.row().classes("items-center gap-2 text-sm"):

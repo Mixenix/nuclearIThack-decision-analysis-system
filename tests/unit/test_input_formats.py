@@ -46,7 +46,13 @@ def test_xml_glob_precheck_and_worker(tmp_path):
     (tmp_path / "manifest.json").write_text(json.dumps({"srez": slices, "applications": 1}))
     assert precheck_dataset(".", str(tmp_path), "*.xml")["pairs"] == 1
     assert precheck_dataset(".", str(tmp_path), "*.xml")["ok"]
-    assert not precheck_dataset(".", str(tmp_path))["ok"]
+    # маски по умолчанию теперь покрывают все поддерживаемые форматы, поэтому
+    # набор только из XML — валидный без дополнительных настроек
+    assert precheck_dataset(".", str(tmp_path))["pairs"] == 1
+    assert precheck_dataset(".", str(tmp_path))["ok"]
+    # а нечисловой «формат» по-прежнему не подхватывается: его просто нет в масках
+    (tmp_path / "before" / "app-2.weird").write_text("arbitrary")
+    assert precheck_dataset(".", str(tmp_path))["pairs"] == 1
     settings = Settings("unused", tmp_path, tmp_path, tmp_path / "art", "python")
     job = PipelineJob({"id": 1, "run_id": "test"}, settings)
     assert job._apps({"slices": slices, "file_glob": "*.xml"}) == [
@@ -66,9 +72,10 @@ def test_multiple_globs_and_duplicate_identity(tmp_path):
 
 
 def test_unknown_extension(tmp_path):
+    """Неподдерживаемое расширение объясняет, что делать, а не молчит."""
     path = tmp_path / "app.weird"
     path.write_text("arbitrary")
-    with pytest.raises(ValueError, match="Unknown input format.*custom .py reader"):
+    with pytest.raises(ValueError, match=r"не поддерживается.*\.yaml.*\.zip"):
         normalizer.read_document(path)
 
 

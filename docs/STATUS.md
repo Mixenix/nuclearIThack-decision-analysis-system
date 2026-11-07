@@ -80,7 +80,7 @@
 
 | Набор | Результат | Кто |
 |---|---|---|
-| `pytest tests` (unit 186 / integration 66 / e2e 19) | **310 passed, 0 failed**, 136 с | qa |
+| `pytest tests` (unit 186 / integration 66 / e2e 19) | **339 passed, 0 failed**, 136 с | qa |
 | `tools/acceptance_ui.py` против живого `:8000` | **24 PASS, 0 FAIL** | qa |
 | сквозной сервисный пробник приёмки | **26/26 PASS** | lead |
 | обход всех экранов в Chromium (вход → прогон → отчёт → сводная → drill → карточка заявки) | **13/13 PASS** | lead |

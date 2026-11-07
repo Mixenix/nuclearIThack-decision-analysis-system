@@ -37,12 +37,39 @@ def _safe_dir(root_ref: str, abs_root: str | None = None) -> Path:
     return candidate
 
 
-def discover_files(directory: Path, file_glob: str = "*.json") -> dict[str, Path]:
+#: все расширения ответов, которые умеет читать поставляемая процедура нормализации
+SUPPORTED_MASKS = (
+    "*.json", "*.jsonl", "*.ndjson", "*.xml", "*.yaml", "*.yml", "*.toml",
+    "*.ini", "*.cfg", "*.conf", "*.properties", "*.csv", "*.tsv",
+    "*.json.gz", "*.xml.gz", "*.yaml.gz", "*.zip",
+)
+DEFAULT_FILE_GLOB = ",".join(SUPPORTED_MASKS)
+
+
+def app_id_of(path: Path) -> str:
+    """APP_ID из имени файла, с учётом составных расширений.
+
+    ``I1.json.gz`` и ``I1.zip`` — это тоже заявка ``I1``: иначе один и тот же
+    набор в разных форматах давал бы разные идентификаторы.
+    """
+    name = path.name
+    changed = True
+    while changed:
+        changed = False
+        for suffix in (".gz", ".bz2", ".xz", ".zip"):
+            if name.lower().endswith(suffix):
+                name = name[: -len(suffix)]
+                changed = True
+    return Path(name).stem
+
+
+def discover_files(directory: Path, file_glob: str = DEFAULT_FILE_GLOB) -> dict[str, Path]:
     """Comma/semicolon-separated filename globs; APP_ID is the filename stem."""
     patterns = file_glob.replace(";", ",").split(",")
     if not patterns or any(not p.strip() or "/" in p or "\\" in p or ".." in p
                            for p in patterns):
-        raise InvalidRequest("file_glob: use filename masks, e.g. *.json,*.xml")
+        raise InvalidRequest(
+            "file_glob: use filename masks, e.g. " + ", ".join(SUPPORTED_MASKS[:4]))
     result: dict[str, Path] = {}
     root = directory.resolve()
     for pattern in patterns:
@@ -55,14 +82,15 @@ def discover_files(directory: Path, file_glob: str = "*.json") -> dict[str, Path
             if not (resolved == root or resolved.is_relative_to(root)):
                 raise InvalidRequest(
                     f"файл {path.name} ведёт за пределы каталога среза: {resolved}")
-            if path.stem in result and result[path.stem] != path:
-                raise InvalidRequest(f"duplicate APP_ID={path.stem}: {result[path.stem]}, {path}")
-            result[path.stem] = path
+            app_id = app_id_of(path)
+            if app_id in result and result[app_id] != path:
+                raise InvalidRequest(f"duplicate APP_ID={app_id}: {result[app_id]}, {path}")
+            result[app_id] = path
     return result
 
 
 def precheck_dataset(root_ref: str, abs_root: str | None = None,
-                     file_glob: str = "*.json") -> dict[str, Any]:
+                     file_glob: str = DEFAULT_FILE_GLOB) -> dict[str, Any]:
     """Everything the config page needs before a run: pairs, manifest diff, issues."""
     try:
         run_dir = _safe_dir(root_ref, abs_root)
@@ -160,7 +188,7 @@ def precheck_dataset(root_ref: str, abs_root: str | None = None,
 
 
 def register_dataset(owner_id: str, name: str, root_ref: str,
-                     file_glob: str = "*.json") -> str:
+                     file_glob: str = DEFAULT_FILE_GLOB) -> str:
     check = precheck_dataset(root_ref, file_glob=file_glob)
     if not check["ok"]:
         raise InvalidRequest("; ".join(check["errors"]))
@@ -189,7 +217,7 @@ def list_datasets(owner_id: str) -> list[dict[str, Any]]:
 
 def set_file_glob(owner_id: str, dataset_id: str, file_glob: str) -> None:
     dataset = get_dataset(owner_id, dataset_id)
-    if dataset.get("file_glob", "*.json") == file_glob:
+    if dataset.get("file_glob", DEFAULT_FILE_GLOB) == file_glob:
         return
     if str(dataset["owner_id"]) != owner_id:
         raise InvalidRequest("Only the dataset owner can change file_glob")

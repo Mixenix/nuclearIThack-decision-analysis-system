@@ -41,7 +41,7 @@ def create_run(
 ) -> str:
     dataset = datasets.get_dataset(owner_id, dataset_id)
     check = datasets.precheck_dataset(dataset["root_ref"], dataset.get("abs_root"),
-                                      dataset.get("file_glob", "*.json"))
+                                      dataset.get("file_glob", datasets.DEFAULT_FILE_GLOB))
     if not check["ok"]:
         raise InvalidRequest("dataset precheck failed: " + "; ".join(check["errors"]))
     if backend not in ("cpu", "gpu"):
@@ -78,7 +78,7 @@ def create_run(
         "root_ref": dataset["root_ref"],
         "dataset_root_ref": dataset["root_ref"],
         "abs_root": dataset.get("abs_root") or "",
-        "file_glob": dataset.get("file_glob", "*.json"),
+        "file_glob": dataset.get("file_glob", datasets.DEFAULT_FILE_GLOB),
         "slices": {
             "BEFORE": {"dir": (slices.get("BEFORE") or {}).get("dir"),
                        "label": (slices.get("BEFORE") or {}).get("label", "MASTER")},
