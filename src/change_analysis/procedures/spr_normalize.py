@@ -79,6 +79,30 @@ def _adjuster(params: dict):
     return make_adjuster(rules) if rules else None
 
 
+def read_document(path: Path, params: dict | None = None) -> dict:
+    """Reader dispatch belongs to user code. Custom code is frozen by the service."""
+    params = params or {}
+    reader_code = params.get("reader_code")
+    if reader_code:
+        namespace = {"__name__": "input_reader"}
+        exec(compile(reader_code, params.get("reader_ref", "reader.py"), "exec"), namespace)
+        value = namespace["read_document"](path)
+    else:
+        kind = params.get("input_format", "auto")
+        kind = path.suffix.lower().lstrip(".") if kind == "auto" else kind
+        if kind == "json":
+            value = json.loads(path.read_text(encoding="utf-8"))
+        elif kind == "xml":
+            from change_analysis.procedures.spr_normalize_xml import read_document as read_xml
+            value = read_xml(path)
+        else:
+            raise ValueError(f"Unknown input format {kind!r} for {path.name}; "
+                             "select a custom .py reader from SCRIPT_ROOT")
+    if not isinstance(value, dict):
+        raise ValueError(f"reader must return a dict: {path}")
+    return value
+
+
 def run(context, inputs, params):
     """inputs: {"apps": [{"app_id","before","after"}], "dataset_root": str}"""
     params = {**DEFAULTS, **(params or {})}
@@ -102,16 +126,18 @@ def run(context, inputs, params):
             after_path = Path(item["after"])
             path = before_path
             try:
-                before = json.loads(before_path.read_text(encoding="utf-8"))
+                before = read_document(before_path, params)
                 path = after_path
-                after = json.loads(after_path.read_text(encoding="utf-8"))
-            except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+                after = read_document(after_path, params)
+            except (OSError, UnicodeError, ValueError) as exc:
                 errors += 1
                 if errors <= max_errors:
                     diagnostics.append(Diagnostic(**{
                         "level": "ERROR",
                         "message": f"APP_ID={app_id}, file={path}: unreadable response: {exc}",
-                        "code": "INCOMPLETE_PAIR" if isinstance(exc, FileNotFoundError) else "BAD_JSON",
+                        "code": ("INCOMPLETE_PAIR" if isinstance(exc, FileNotFoundError)
+                                 else "BAD_JSON" if isinstance(exc, json.JSONDecodeError)
+                                 else "BAD_INPUT"),
                         "where": f"{app_id}",
                     }))
                 context.log(f"cannot read pair {app_id}: {exc}")

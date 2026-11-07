@@ -90,7 +90,8 @@ def runs_page() -> None:
             if not known:
                 ui.label("Датасеты не зарегистрированы").classes("text-sm text-slate-500")
             for dataset in known:
-                check = datasets.precheck_dataset(dataset["root_ref"])
+                check = datasets.precheck_dataset(dataset["root_ref"], dataset.get("abs_root"),
+                                                  dataset.get("file_glob", "*.json"))
                 with ui.row().classes("items-center gap-2"):
                     ui.icon("check_circle" if check["ok"] else "error",
                             color="green" if check["ok"] else "red")
@@ -101,21 +102,26 @@ def runs_page() -> None:
                         ui.badge(error, color="red").classes("text-xs")
 
         with ui.expansion("Добавить датасет", icon="add_box"):
-            found = [d for d in datasets.discover_dataset_roots() if d["ok"]]
-            options = {d["root_ref"]: f"{d['root_ref']} ({d['pairs']} пар)" for d in found}
+            found = datasets.discover_dataset_roots()
+            options = {d["root_ref"]: d["root_ref"] for d in found}
             if not options:
                 ui.label("В DATASET_ROOT не найдено ни одного прогона с manifest.json") \
                     .classes("text-sm text-slate-500")
             else:
                 picker = ui.select(options, label="Каталог прогона").props("outlined dense")
                 name_input = ui.input("Название").props("outlined dense")
+                file_glob = ui.input("Маски файлов (через запятую)", value="*.json").props("outlined dense")
 
                 def add() -> None:
                     if not picker.value:
                         ui.notify("Выберите каталог", type="warning")
                         return
-                    datasets.register_dataset(owner, name_input.value or picker.value,
-                                              picker.value)
+                    try:
+                        datasets.register_dataset(owner, name_input.value or picker.value,
+                                                  picker.value, file_glob.value)
+                    except Exception as exc:  # noqa: BLE001 - show registration validation
+                        ui.notify(str(exc), type="negative")
+                        return
                     ui.notify("Датасет зарегистрирован", type="positive")
                     ui.navigate.to("/")
 

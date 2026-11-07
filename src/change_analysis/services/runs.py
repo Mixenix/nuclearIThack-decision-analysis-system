@@ -40,7 +40,8 @@ def create_run(
     idempotency_key: str | None = None,
 ) -> str:
     dataset = datasets.get_dataset(owner_id, dataset_id)
-    check = datasets.precheck_dataset(dataset["root_ref"], dataset.get("abs_root"))
+    check = datasets.precheck_dataset(dataset["root_ref"], dataset.get("abs_root"),
+                                      dataset.get("file_glob", "*.json"))
     if not check["ok"]:
         raise InvalidRequest("dataset precheck failed: " + "; ".join(check["errors"]))
     if backend not in ("cpu", "gpu"):
@@ -57,6 +58,12 @@ def create_run(
         resolved = procedures.resolve_procedure(
             owner_id, stage, (selections.get("procedures") or {}).get(stage)
         )
+        if stage == "normalize" and resolved["params"].get("reader_ref"):
+            resolved["params"] = dict(resolved["params"])
+            ref = resolved["params"]["reader_ref"]
+            if not ref.endswith(".py"):
+                raise InvalidRequest("reader_ref must be a .py file in SCRIPT_ROOT")
+            resolved["params"]["reader_code"] = procedures.read_registered_file(ref)
         procedures_snapshot[stage] = {
             "code": resolved["code"],
             "source_kind": resolved["source_kind"],
@@ -71,6 +78,7 @@ def create_run(
         "root_ref": dataset["root_ref"],
         "dataset_root_ref": dataset["root_ref"],
         "abs_root": dataset.get("abs_root") or "",
+        "file_glob": dataset.get("file_glob", "*.json"),
         "slices": {
             "BEFORE": {"dir": (slices.get("BEFORE") or {}).get("dir"),
                        "label": (slices.get("BEFORE") or {}).get("label", "MASTER")},

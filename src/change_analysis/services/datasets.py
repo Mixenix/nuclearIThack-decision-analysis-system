@@ -37,7 +37,25 @@ def _safe_dir(root_ref: str, abs_root: str | None = None) -> Path:
     return candidate
 
 
-def precheck_dataset(root_ref: str, abs_root: str | None = None) -> dict[str, Any]:
+def discover_files(directory: Path, file_glob: str = "*.json") -> dict[str, Path]:
+    """Comma/semicolon-separated filename globs; APP_ID is the filename stem."""
+    patterns = file_glob.replace(";", ",").split(",")
+    if not patterns or any(not p.strip() or "/" in p or "\\" in p or ".." in p
+                           for p in patterns):
+        raise InvalidRequest("file_glob: use filename masks, e.g. *.json,*.xml")
+    result: dict[str, Path] = {}
+    for pattern in patterns:
+        for path in sorted(directory.glob(pattern.strip())):
+            if not path.is_file():
+                continue
+            if path.stem in result and result[path.stem] != path:
+                raise InvalidRequest(f"duplicate APP_ID={path.stem}: {result[path.stem]}, {path}")
+            result[path.stem] = path
+    return result
+
+
+def precheck_dataset(root_ref: str, abs_root: str | None = None,
+                     file_glob: str = "*.json") -> dict[str, Any]:
     """Everything the config page needs before a run: pairs, manifest diff, issues."""
     try:
         run_dir = _safe_dir(root_ref, abs_root)
@@ -74,8 +92,13 @@ def precheck_dataset(root_ref: str, abs_root: str | None = None) -> dict[str, An
         return {"ok": False, "errors": errors, "warnings": warnings, "pairs": 0,
                 "run_dir": str(run_dir)}
 
-    before_names = {p.stem for p in before_dir.glob("*.json")}
-    after_names = {p.stem for p in after_dir.glob("*.json")}
+    try:
+        before_names = set(discover_files(before_dir, file_glob))
+        after_names = set(discover_files(after_dir, file_glob))
+    except InvalidRequest as exc:
+        return {"ok": False, "errors": [str(exc)], "warnings": [], "pairs": 0}
+    if not before_names or not after_names:
+        errors.append(f"no files matching file_glob={file_glob!r} in BEFORE/AFTER")
     pairs = sorted(before_names & after_names)
     only_before = sorted(before_names - after_names)
     only_after = sorted(after_names - before_names)
@@ -105,31 +128,46 @@ def precheck_dataset(root_ref: str, abs_root: str | None = None) -> dict[str, An
     }
 
 
-def register_dataset(owner_id: str, name: str, root_ref: str) -> str:
-    check = precheck_dataset(root_ref)
+def register_dataset(owner_id: str, name: str, root_ref: str,
+                     file_glob: str = "*.json") -> str:
+    check = precheck_dataset(root_ref, file_glob=file_glob)
     if not check["ok"]:
         raise InvalidRequest("; ".join(check["errors"]))
     with tx() as conn, conn.cursor() as cur:
         cur.execute(
-            "INSERT INTO ca.datasets (owner_id, name, root_ref, abs_root, manifest, app_pairs)"
-            " VALUES (%s, %s, %s, %s, %s::jsonb, %s)"
+            "INSERT INTO ca.datasets (owner_id, name, root_ref, abs_root, manifest, app_pairs, file_glob)"
+            " VALUES (%s, %s, %s, %s, %s::jsonb, %s, %s)"
             " ON CONFLICT (root_ref) DO UPDATE SET name = EXCLUDED.name,"
             " abs_root = EXCLUDED.abs_root, manifest = EXCLUDED.manifest,"
-            " app_pairs = EXCLUDED.app_pairs"
+            " app_pairs = EXCLUDED.app_pairs, file_glob = EXCLUDED.file_glob"
             " RETURNING id",
             (owner_id, name, root_ref, str(_root()), json.dumps(check["manifest"]),
-             check["pairs"]),
+             check["pairs"], file_glob),
         )
         return str(cur.fetchone()["id"])
 
 
 def list_datasets(owner_id: str) -> list[dict[str, Any]]:
     rows = query(
-        "SELECT id, name, root_ref, abs_root, app_pairs, shared, manifest, created_at"
+        "SELECT id, name, root_ref, abs_root, app_pairs, shared, manifest, created_at, file_glob"
         " FROM ca.datasets WHERE owner_id = %s OR shared = true ORDER BY name",
         (owner_id,),
     )
     return [{**r, "id": str(r["id"])} for r in rows]
+
+
+def set_file_glob(owner_id: str, dataset_id: str, file_glob: str) -> None:
+    dataset = get_dataset(owner_id, dataset_id)
+    if dataset.get("file_glob", "*.json") == file_glob:
+        return
+    if str(dataset["owner_id"]) != owner_id:
+        raise InvalidRequest("Only the dataset owner can change file_glob")
+    check = precheck_dataset(dataset["root_ref"], dataset.get("abs_root"), file_glob)
+    if not check["ok"]:
+        raise InvalidRequest("; ".join(check["errors"]))
+    with tx() as conn, conn.cursor() as cur:
+        cur.execute("UPDATE ca.datasets SET file_glob=%s, app_pairs=%s WHERE id=%s AND owner_id=%s",
+                    (file_glob, check["pairs"], dataset_id, owner_id))
 
 
 def get_dataset(owner_id: str, dataset_id: str) -> dict[str, Any]:

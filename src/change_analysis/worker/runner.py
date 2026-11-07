@@ -27,6 +27,7 @@ from typing import Any, Iterator
 from ..config import Settings
 from ..db.connection import copy_rows, execute, query, tx
 from ..db.migrations import apply_migrations
+from ..services.datasets import discover_files
 from . import queue
 
 SRC_DIR = Path(__file__).resolve().parents[2]
@@ -124,23 +125,18 @@ class PipelineJob:
         if not before_dir.is_dir() or not after_dir.is_dir():
             raise StageFailed("prepare", f"slice directories not found under {run_dir}")
 
-        names = sorted(p.name for p in before_dir.glob("*.json"))
-        after_names = {p.name for p in after_dir.glob("*.json")}
+        before_files = discover_files(before_dir, snapshot.get("file_glob", "*.json"))
+        after_files = discover_files(after_dir, snapshot.get("file_glob", "*.json"))
         apps: list[dict[str, str]] = []
         broken: list[str] = []
-        for name in names:
-            app_id = name[:-5]
-            if name not in after_names:
-                broken.append(f"{app_id}: no AFTER slice: {after_dir / name}")
+        for app_id in sorted(before_files.keys() | after_files.keys()):
+            before = before_files.get(app_id)
+            after = after_files.get(app_id)
+            if before is None or after is None:
+                broken.append(f"{app_id}: no {'BEFORE' if before is None else 'AFTER'} slice")
             apps.append({"app_id": app_id,
-                         "before": str(before_dir / name),
-                         "after": str(after_dir / name)})
-        extra = after_names - {p.name for p in before_dir.glob("*.json")}
-        for name in sorted(extra):
-            broken.append(f"{name[:-5]}: no BEFORE slice: {before_dir / name}")
-            apps.append({"app_id": name[:-5],
-                         "before": str(before_dir / name),
-                         "after": str(after_dir / name)})
+                         "before": str(before or before_dir / after.name),
+                         "after": str(after or after_dir / before.name)})
         if broken and require_complete:
             # a batch run must not silently drop applications (PLAN.md §7)
             raise StageFailed(

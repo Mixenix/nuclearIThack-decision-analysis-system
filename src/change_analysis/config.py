@@ -86,6 +86,50 @@ class Settings:
         }
 
 
+
+def _local_ipv4() -> str:
+    """Best-effort primary IPv4 of this machine (no packets are sent)."""
+    import socket
+
+    # The hostname resolves to the address the machine is actually reachable on;
+    # a UDP "connect" would pick the tunnel interface here (172.19.0.1), which no
+    # browser on the jury's laptop can open.
+    try:
+        addr = socket.gethostbyname(socket.gethostname())
+        if addr and not addr.startswith("127."):
+            return addr
+    except OSError:
+        pass
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        sock.connect(("8.8.8.8", 80))
+        return sock.getsockname()[0]
+    except OSError:
+        return "127.0.0.1"
+    finally:
+        sock.close()
+
+
+def resolve_public_base_url(configured: str, host: str, port: int) -> str:
+    """Base URL used in exported HTML links.
+
+    A laptop changes networks between the rehearsal and the defence: on this run
+    the machine moved from 192.168.31.231 to 10.17.152.146, and every absolute
+    link in an already-exported report died with it.  So an *explicit*
+    ``PUBLIC_BASE_URL`` is honoured, but when it is empty (or still points at
+    ``localhost``) the address is derived from the network the app is served on.
+    """
+    configured = (configured or "").strip().rstrip("/")
+    if configured and "127.0.0.1" not in configured and "localhost" not in configured:
+        return configured
+    bind = (host or "").strip()
+    if bind in ("", "0.0.0.0", "::"):
+        bind = _local_ipv4()
+    elif bind in ("127.0.0.1", "localhost"):
+        bind = _local_ipv4()
+    return f"http://{bind}:{port}"
+
+
 _CACHE: Settings | None = None
 
 
@@ -137,7 +181,11 @@ def load_settings(force: bool = False) -> Settings:
         artifact_root=path("ARTIFACT_ROOT", APP_ROOT / "artifacts"),
         compute_python=get("COMPUTE_PYTHON", str(APP_ROOT / ".venv" / "bin" / "python")),
         compute_backend=get("COMPUTE_BACKEND", "cpu").lower(),
-        public_base_url=get("PUBLIC_BASE_URL", "http://127.0.0.1:8080").rstrip("/"),
+        public_base_url=resolve_public_base_url(
+            get("PUBLIC_BASE_URL"),
+            get("APP_HOST", "127.0.0.1"),
+            int(get("APP_PORT", "8080")),
+        ),
         app_storage_secret=secret,
         storage_secret=secret,
         stage_timeout_sec=int(get("STAGE_TIMEOUT_SEC", "1800")),

@@ -66,6 +66,18 @@ def configs_page(config_id: str | None = None) -> None:
             else str(dataset_list[0]["id"]),
         ).props("outlined dense").classes("w-full")
         precheck_box = ui.column().classes("w-full gap-1")
+        normalize_params = ((selections.get("procedures") or {}).get("normalize") or {}).get("params") or {}
+        input_format = ui.select(
+            {"auto": "Авто: JSON / XML по расширению", "json": "JSON", "xml": "XML",
+             "custom": "Свой .py-ридер из SCRIPT_ROOT"}, label="Входной формат",
+            value="custom" if normalize_params.get("reader_ref") else normalize_params.get("input_format", "auto"),
+        ).props("outlined dense").classes("w-full")
+        reader_select = ui.select(
+            [f["path"] for f in options["registered_files"]], label="Ридер: read_document(path) → dict",
+            value=normalize_params.get("reader_ref"),
+        ).props("outlined dense").classes("w-full")
+        reader_select.set_visibility(input_format.value == "custom")
+        glob_input = ui.input("Маски файлов (через запятую)").props("outlined dense").classes("w-full")
 
         def refresh_precheck() -> None:
             precheck_box.clear()
@@ -78,7 +90,8 @@ def configs_page(config_id: str | None = None) -> None:
                 with precheck_box:
                     layout.error_box(f"Датасет недоступен: {exc}")
                 return
-            check = datasets.precheck_dataset(dataset["root_ref"])
+            glob_input.set_value(dataset.get("file_glob", "*.json"))
+            check = datasets.precheck_dataset(dataset["root_ref"], dataset.get("abs_root"), glob_input.value)
             with precheck_box:
                 with ui.row().classes("items-center gap-2 text-sm"):
                     ui.icon("check_circle" if check["ok"] else "error",
@@ -98,6 +111,12 @@ def configs_page(config_id: str | None = None) -> None:
 
         dataset_select.on_value_change(lambda _: refresh_precheck())
         refresh_precheck()
+
+        def format_changed() -> None:
+            reader_select.set_visibility(input_format.value == "custom")
+            if input_format.value in ("json", "xml"):
+                glob_input.set_value("*." + input_format.value)
+        input_format.on_value_change(lambda _: format_changed())
 
         # -- procedures -----------------------------------------------------
         procedure_state: dict[str, dict[str, Any]] = {}
@@ -209,6 +228,14 @@ def configs_page(config_id: str | None = None) -> None:
         def collect() -> dict[str, Any]:
             for stage, field in procedure_params.items():
                 procedure_state[stage]["params"] = parse_params(field.value, STAGE_LABEL[stage])
+            reader_params = procedure_state["normalize"]["params"]
+            reader_params["input_format"] = input_format.value
+            reader_params.pop("reader_ref", None)
+            reader_params.pop("reader_code", None)
+            if input_format.value == "custom":
+                if not reader_select.value:
+                    raise ValueError("Выберите .py-ридер из SCRIPT_ROOT")
+                reader_params["reader_ref"] = reader_select.value
             chosen_checks = []
             for check_id, switch in switches.items():
                 if not switch.value:
@@ -220,9 +247,11 @@ def configs_page(config_id: str | None = None) -> None:
 
         def save() -> str | None:
             try:
+                selected = collect()
+                datasets.set_file_glob(owner, str(dataset_select.value), glob_input.value)
                 new_id = configs.save_configuration(
                     owner, name_input.value or "Конфигурация",
-                    str(dataset_select.value), collect(),
+                    str(dataset_select.value), selected,
                     {"backend": backend_toggle.value},
                     config_id=saved["id"],
                 )
