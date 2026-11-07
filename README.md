@@ -230,6 +230,9 @@ python3 -m venv .venv
     "argon2-cffi==25.1.0" \
     "httpx==0.28.1"
 cp .env.example .env          # затем отредактируйте пути, см. §4
+
+# тот же набор одной командой:  .venv/bin/pip install -r requirements/cpu.txt
+# с тестами:                    .venv/bin/pip install -r requirements/dev.txt
 ```
 
 `pytest` нужен только для тестов: `.venv/bin/pip install "pytest==9.2.0"`.

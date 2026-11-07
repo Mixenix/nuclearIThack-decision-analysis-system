@@ -1,0 +1,5 @@
+# Extra packages for the test and browser suites (not needed to run the application).
+-r cpu.txt
+pytest==9.2.0
+pytest-timeout==2.4.0
+playwright==1.56.0

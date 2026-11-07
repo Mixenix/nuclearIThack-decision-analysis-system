@@ -1,10 +1,10 @@
-# CPU-only environment (the required mode).
-# Verified combination: Python 3.14.7, PostgreSQL 18.6.
+# CPU-only environment — the required mode, verified on Python 3.14.7 / PostgreSQL 18.6.
+# This is exactly the set the README installs; pandas/numpy are deliberately absent:
+# the pipeline is standard library plus SQL (grep -rn "import pandas" src/ → пусто).
 nicegui==4.0.0
 psycopg[binary]==3.3.8
-psycopg_pool
-pandas==3.1.1
+psycopg-pool==3.3.3
 jinja2==3.1.6
-argon2-cffi
-httpx>=0.28
-pytest>=8
+markupsafe==3.0.4
+argon2-cffi==25.1.0
+httpx==0.28.1
