@@ -68,6 +68,13 @@ def check_readme() -> None:
         ok(f"шапка: {name}", "есть") if re.search(pattern, text) else bad(
             f"шапка: {name}", "не найдено")
 
+    # демо-видео обязательно по требованиям организаторов: в README должна быть ссылка
+    video_hosts = ("drive.google.com", "youtube.com", "youtu.be", "vk.com/video",
+                   "disk.yandex", "rutube.ru")
+    has_video = any(host in text for host in video_hosts)
+    ok("ссылка на демо-видео", "есть в шапке") if has_video else bad(
+        "ссылка на демо-видео", "в README нет ссылки на видео (требование организаторов)")
+
     if "{{" in text or "}}" in text:
         bad("шапка заполнена", "в README остались плейсхолдеры вида {{...}}")
     else:
