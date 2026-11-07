@@ -2,6 +2,8 @@
 
     python -m change_analysis.cli bootstrap          # schema + demo users + dataset
     python -m change_analysis.cli run <login>        # create and execute a full run
+    python -m change_analysis.cli useradd <login> [password] [--name ФИО]
+    python -m change_analysis.cli users              # список пользователей
 """
 
 from __future__ import annotations
@@ -69,6 +71,40 @@ def run_once(login: str = "analyst", name: str = "Полный прогон") ->
     return 0
 
 
+def useradd(login: str, password: str = "", display_name: str = "") -> int:
+    """Add one user. Without a password a readable random one is generated.
+
+    Нужно, чтобы дать доступ коллеге: у каждого пользователя свои прогоны,
+    конфигурации и рабочая область, чужие данные ему не видны.
+    """
+    import secrets
+
+    from .auth import service as auth
+
+    if not login or not login.strip():
+        print("логин не может быть пустым")
+        return 1
+    login = login.strip()
+    password = password or secrets.token_urlsafe(9)
+    user_id = auth.create_user(login, password, display_name or login)
+    print(f"пользователь создан: {login} / {password}")
+    print(f"id: {user_id}")
+    return 0
+
+
+def users() -> int:
+    from .db.connection import query
+
+    rows = query("SELECT login, display_name, created_at FROM ca.users ORDER BY created_at")
+    if not rows:
+        print("пользователей нет — запустите bootstrap")
+        return 0
+    for row in rows:
+        print(f"  {row['login']:20s} {row['display_name'][:30]:30s} {row['created_at']:%Y-%m-%d %H:%M}")
+    print(f"всего: {len(rows)}")
+    return 0
+
+
 def main(argv: list[str]) -> int:
     load_settings()
     if len(argv) < 2:
@@ -79,6 +115,21 @@ def main(argv: list[str]) -> int:
         return bootstrap()
     if command == "run":
         return run_once(argv[2] if len(argv) > 2 else "analyst")
+    if command == "useradd":
+        if len(argv) < 3:
+            print("usage: useradd <login> [password] [--name ФИО]")
+            return 2
+        login = argv[2]
+        rest = argv[3:]
+        name = ""
+        if "--name" in rest:
+            index = rest.index("--name")
+            name = rest[index + 1] if index + 1 < len(rest) else ""
+            rest = rest[:index] + rest[index + 2:]
+        password = rest[0] if rest else ""
+        return useradd(login, password, name)
+    if command == "users":
+        return users()
     print(f"unknown command {command!r}")
     return 2
 
