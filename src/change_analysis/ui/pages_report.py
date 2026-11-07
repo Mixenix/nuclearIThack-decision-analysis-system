@@ -47,8 +47,9 @@ def report_page(run_id: str, revision: int | None = None) -> None:
             async def download() -> None:
                 download_target.set_text("Формирование HTML…")
                 try:
-                    path = await background.io_bound(report_service.export_html, owner, run_id,
-                                                     revision)
+                    path = await background.io_bound(
+                        report_service.export_html, owner, run_id, revision,
+                        _current_base_url())
                 except Exception as exc:  # noqa: BLE001
                     download_target.set_text("Экспорт не удался")
                     ui.notify(f"Экспорт не удался: {exc}", type="negative")
@@ -538,3 +539,27 @@ def checks_catalogue_page() -> None:
                 "text-sm text-slate-500")
         for item in own:
             ui.link(item["name"], f"/workspace?procedure_id={item['id']}").classes("text-sm")
+
+
+def _current_base_url() -> str:
+    """Address the page is being viewed at (scheme + host), best effort.
+
+    Behind a tunnel the host is the tunnel's name, on a LAN it is the machine's
+    address; either way the exported report links back to the same place the
+    reader opened.  Falls back to the configured value if the request is not
+    available.
+    """
+    try:
+        from nicegui import context
+
+        request = getattr(context.client, "request", None)
+        if request is None:
+            return ""
+        headers = getattr(request, "headers", {}) or {}
+        host = headers.get("host") or getattr(request.url, "netloc", "")
+        if not host:
+            return ""
+        scheme = headers.get("x-forwarded-proto") or getattr(request.url, "scheme", "http")
+        return f"{scheme}://{host}"
+    except Exception:  # noqa: BLE001 - never break the download
+        return ""

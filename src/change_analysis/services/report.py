@@ -406,7 +406,8 @@ def align_summary_checks(summary: dict[str, Any], checks: dict[str, Any]) -> Non
             f"Высокоуверенных срабатываний проверок во всём прогоне: {counts['high_fail']}.")
 
 
-def export_html(user_id: str, run_id: str, revision: int | None = None) -> str:
+def export_html(user_id: str, run_id: str, revision: int | None = None,
+                base_url: str | None = None) -> str:
     from ..config import load_settings
     from ..reports.export import export_report
 
@@ -416,7 +417,11 @@ def export_html(user_id: str, run_id: str, revision: int | None = None) -> str:
         raise InvalidRequest("витрина этой ревизии больше недоступна")
     settings = load_settings()
     path = settings.artifact_root / str(run["id"]) / f"report-rev{rev}.html"
-    return export_report(run_id, str(path), settings.public_base_url)
+    # Links inside the document must point where the reader actually is: the
+    # configured address is right for a LAN, but wrong when the same page is
+    # opened through a tunnel or under another host name.
+    resolved = (base_url or "").strip().rstrip("/") or settings.public_base_url
+    return export_report(run_id, str(path), resolved)
 
 
 def available_products(user_id: str, run_id: str, limit: int = 200) -> list[str]:
