@@ -7,18 +7,21 @@ name = "change-analysis"
 version = "0.1.0"
 description = "СПР change-analysis: normalize, compare, aggregate two strategy slices"
 requires-python = ">=3.11"
+# pandas/numpy are deliberately absent: the pipeline is the standard library plus SQL
+# (grep -rn "import pandas" src/ → пусто).  Versions are the verified set, see
+# requirements/cpu.txt.
 dependencies = [
     "nicegui==4.0.0",
-    "psycopg[binary]>=3.2",
-    "psycopg_pool>=3.2",
-    "pandas>=2.0",
-    "jinja2>=3.1",
-    "argon2-cffi>=23",
-    "httpx>=0.27",
+    "psycopg[binary]==3.3.8",
+    "psycopg-pool==3.3.3",
+    "jinja2==3.1.6",
+    "markupsafe==3.0.4",
+    "argon2-cffi==25.1.0",
+    "httpx==0.28.1",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8"]
+dev = ["pytest==9.2.0", "pytest-timeout==2.4.0", "playwright==1.56.0"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

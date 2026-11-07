@@ -78,9 +78,13 @@ def settings():
     return loaded
 
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope="session")
 def test_database(settings):
     """Prepare the throw-away database and leave it clean.
+
+    Deliberately **not** ``autouse``: unit tests must run without a database at
+    all, so the fixture is pulled in only by the tests (and fixtures) that use it.
+    
 
     Runs that a killed test left behind are removed (only rows named ``qa-...``),
     and the planner statistics are refreshed: without statistics a pivot over a

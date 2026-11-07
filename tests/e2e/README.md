@@ -26,7 +26,7 @@ PYTHONPATH=src .venv/bin/python -m change_analysis.worker.main
 Run:
 
 ```sh
-.venv/bin/python -u tests/e2e/ui_suite.py
+.venv/bin/python -u tools/dev/playwright/ui_suite.py
 ```
 
 Install Playwright if missing (`.venv/bin/pip install playwright`). The drivers
@@ -35,7 +35,7 @@ unnecessary. They assume the provided analyst accounts and the original finished
 2002-pair run named «Полный прогон». The suite deliberately creates test records;
 it does not delete or reset existing data. The run may take several minutes on
 a busy database. Each driver can also be run separately after its predecessors.
-`ui_final.py` is read-only and checks the artifacts created by previous drivers.
+`tools/dev/playwright/ui_final.py` is read-only and checks the artifacts created by previous drivers.
 
 The final assertion currently reproduces a service bug: after a checks-only job,
 `runs.revision` advances, while pivot facts keep their earlier revision. A failing
