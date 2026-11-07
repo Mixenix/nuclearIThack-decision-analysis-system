@@ -50,6 +50,12 @@ INJECTION = "<script>alert(1)</script>"
 
 
 def pytest_configure(config: pytest.Config) -> None:
+    # A hung test used to hang the whole suite (a pivot query waited for minutes on
+    # a bloated test database).  Fail loudly instead of waiting for ever.
+    # ``-p no:timeout`` disables this; the plugin ships in app/.venv.
+    if config.pluginmanager.hasplugin("timeout"):
+        config.option.timeout = float(os.environ.get("QA_TEST_TIMEOUT", "240"))
+        config.option.timeout_method = "thread"
     config.addinivalue_line("markers", "unit: no database, no network")
     config.addinivalue_line("markers", "integration: requires PostgreSQL")
     config.addinivalue_line("markers", "e2e: drives the pipeline or the report cycle")
@@ -74,14 +80,26 @@ def settings():
 
 @pytest.fixture(scope="session", autouse=True)
 def test_database(settings):
-    """Apply migrations to the throw-away database and close the pool at the end."""
-    from change_analysis.db.connection import close_pool
+    """Prepare the throw-away database and leave it clean.
+
+    Runs that a killed test left behind are removed (only rows named ``qa-...``),
+    and the planner statistics are refreshed: without statistics a pivot over a
+    bloated table takes minutes instead of a second, which used to look like a
+    hang in the middle of the suite.
+    """
+    from change_analysis.db.connection import close_pool, execute
     from change_analysis.db.migrations import apply_migrations
     from qa_support import assert_test_database
 
     assert_test_database(settings.database_url)
     applied = apply_migrations()
-    yield {"applied": applied}
+    # ``%`` cannot appear unescaped in a parameterised psycopg query, so the
+    # prefix test is expressed as a regular expression
+    stale = execute("DELETE FROM ca.runs WHERE name ~ '^qa-'")
+    for table in ("comparison_rows", "pivot_facts", "pivot_membership",
+                  "app_segments", "product_segments"):
+        execute(f"ANALYZE ca.{table}")
+    yield {"applied": applied, "stale_runs_removed": stale}
     close_pool()
 
 
@@ -220,6 +238,12 @@ def completed_run(settings, test_database, owner, dataset_id) -> dict:
     assert run["state"] == "SUCCEEDED", (
         f"the pipeline did not succeed: {run['state']} {run.get('error_message')!r}"
     )
+    from change_analysis.db.connection import execute as _execute
+
+    for table in ("comparison_rows", "pivot_facts", "pivot_membership",
+                  "app_segments", "product_segments", "check_results"):
+        _execute(f"ANALYZE ca.{table}")
+
     payload = {
         "run_id": run_id,
         "owner": owner,

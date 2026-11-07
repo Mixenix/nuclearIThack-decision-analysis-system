@@ -164,13 +164,17 @@ def pivot_in_browser(base_url: str, login: str, password: str,
                 _login(page, base_url, login, password)
                 page.goto(f"{base_url}/runs/{run_id}/explore", timeout=30000)
                 page.get_by_role("button", name="Пересчитать").click()
-                # the counter is set before the matrix rows are added, so wait for
-                # the last element the table renders, not for the first one
-                page.wait_for_function(
-                    "() => document.body.innerText.includes('Итог по строкам')",
-                    timeout=90000,
-                )
-                text = page.inner_text("body")
+                # The matrix is rebuilt more than once (the layout handlers fire on
+                # page build as well), so the text briefly disappears again.  Wait
+                # for a *stable* read that contains the table, not for one flash.
+                deadline = 90
+                text = ""
+                for _ in range(deadline * 2):
+                    text = page.evaluate("() => document.body.innerText")
+                    if ("Итог по строкам" in text and "Итого" in text
+                            and "Уникальных заявок в выборке" in text):
+                        break
+                    page.wait_for_timeout(500)
                 match = re.search(r"Уникальных заявок в выборке:\s*([\d\s\u00a0]+)", text)
                 total = int(re.sub(r"\D", "", match.group(1))) if match else None
                 has_totals = "Итого" in text and "Итог по строкам" in text

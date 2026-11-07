@@ -13,11 +13,13 @@ code path.  The expensive full run is exercised by ``test_full_cycle.py``.
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from change_analysis.checks.loader import list_builtin_checks
 from change_analysis.contracts.types import FilterSpec
-from change_analysis.db.connection import query
+from change_analysis.db.connection import execute, query
 from change_analysis.services import checks as checks_service
 from change_analysis.services import procedures, report, runs
 from change_analysis.services.errors import InvalidRequest
@@ -98,6 +100,12 @@ def finished_run_with_checks(synthetic_run, settings, owner):
     checks = [{"id": spec.id, "label": spec.label, "code": spec.code,
                "params": dict(spec.params), "source_kind": "file",
                "source_ref": spec.source_ref} for spec in list_builtin_checks()]
+    # a real run freezes its configured checks in the snapshot at creation time;
+    # CHECKS_ONLY merges into that list and republishes it, so the fixture must
+    # declare the same set, otherwise revision 2 would legitimately contain only
+    # the newly added check
+    execute("UPDATE ca.runs SET snapshot = %s::jsonb WHERE id = %s",
+            (json.dumps({"checks": checks}), run_id))
     PipelineJob({"id": 0, "run_id": run_id}, settings).run_checks(checks, revision=1)
     published = query(
         "SELECT count(*) AS n FROM ca.check_results WHERE run_id = %s AND revision = 1",

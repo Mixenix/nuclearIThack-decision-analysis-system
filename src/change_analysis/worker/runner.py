@@ -657,6 +657,10 @@ class PipelineJob:
                     " processed_pairs = expected_pairs WHERE id = %s",
                     (json.dumps(summary), self.run_id),
                 )
+            # Warm the report paths before announcing the run as finished: a
+            # SUCCEEDED run must open fast, not 77 s later once the pages happen
+            # to be in shared buffers (PLAN §13.2 — publish only what is ready).
+            self._warm_reads()
             queue.finish(self.job_id, self.run_id, "SUCCEEDED", run_state="SUCCEEDED")
             queue.add_event(self.run_id, None, "INFO",
                             f"run finished: {summary.get('changed')} applications with "
@@ -667,6 +671,34 @@ class PipelineJob:
             self._fail("pipeline", f"{type(exc).__name__}: {exc}")
         finally:
             self._purge_large_artifacts()
+
+    def _warm_reads(self) -> None:
+        """Warm what the analyst opens first, and refresh planner statistics.
+
+        Right after a bulk load the first summary/pivot request can take tens of
+        seconds: the pages are not in shared buffers yet and the load itself
+        triggers an autovacuum on the very tables the report reads. The same
+        request a moment later takes under a second. Measured here: 77 s for the
+        first summary against 0.4-0.5 s for the next ones. Paying ~2 s of worker
+        time removes that cliff, and the number is logged rather than hidden.
+        """
+        started = __import__("time").perf_counter()
+        try:
+            execute("ANALYZE ca.comparison_rows, ca.app_segments, ca.pivot_facts,"
+                    " ca.pivot_membership")
+            for sql in (
+                "SELECT count(*) FROM ca.comparison_rows WHERE run_id = %s",
+                "SELECT count(*) FROM ca.pivot_membership WHERE run_id = %s",
+                "SELECT count(DISTINCT app_id) FROM ca.comparison_rows"
+                " WHERE run_id = %s AND diff_flag = 1",
+            ):
+                query(sql, (self.run_id,))
+            elapsed = __import__("time").perf_counter() - started
+            queue.add_event(self.run_id, None, "INFO",
+                            f"read warm-up and ANALYZE finished in {elapsed:.1f}s")
+        except Exception as exc:  # noqa: BLE001 - warming must never fail a run
+            queue.add_event(self.run_id, None, "WARN",
+                            f"read warm-up skipped: {type(exc).__name__}: {exc}")
 
     def _fail(self, stage: str, message: str) -> None:
         queue.finish(self.job_id, self.run_id, "FAILED", error=message[:4000],
