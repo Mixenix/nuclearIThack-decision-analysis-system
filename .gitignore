@@ -1,0 +1,16 @@
+# local environment and generated state — never shipped
+.venv/
+.pgdata/
+artifacts/
+.nicegui/
+.storage_secret
+.env
+*.log
+.pytest_cache/
+
+# python
+__pycache__/
+*.pyc
+
+# the task package is provided by the organisers and is NOT part of this repo
+../ХАКАТОН_СИСТЕМА_АНАЛИЗА_ИЗМЕНЕНИЙ/

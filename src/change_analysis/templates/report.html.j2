@@ -1,0 +1,333 @@
+{#- Standalone report: inline CSS, no external resources, escaped by default -#}
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Отчёт по прогону {{ run.name or run.id }}</title>
+<style>
+  :root { --ink:#1f2937; --muted:#6b7280; --line:#d1d5db; --bad:#b91c1c; --warn:#b45309; }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:32px; font:14px/1.5 -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+         color:var(--ink); background:#fff; max-width:1180px; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  h2 { font-size:16px; margin:28px 0 8px; border-bottom:1px solid var(--line); padding-bottom:4px; }
+  h3 { font-size:13px; margin:16px 0 6px; }
+  .meta { color:var(--muted); font-size:12px; margin-bottom:20px; }
+  .meta code { background:#f3f4f6; padding:1px 4px; border-radius:3px; }
+  .links { margin:10px 0 0; font-size:12px; }
+  .links a { margin-right:14px; }
+  .cards { display:flex; flex-wrap:wrap; gap:10px; margin:12px 0; }
+  .card { border:1px solid var(--line); border-radius:6px; padding:8px 12px; min-width:150px; }
+  .card .label { color:var(--muted); font-size:11px; }
+  .card .value { font-size:20px; font-weight:600; }
+  table { border-collapse:collapse; width:100%; font-size:12px; margin-top:8px; }
+  th, td { border-bottom:1px solid var(--line); padding:5px 6px; text-align:left; vertical-align:top; }
+  th { background:#f9fafb; font-weight:600; }
+  td.num { text-align:right; white-space:nowrap; }
+  tr.fail-high { background:#fef2f2; }
+  tr.fail-high td.verdict { color:var(--bad); font-weight:700; }
+  tr.fail-low  { background:#fffdf6; color:#6b6060; }
+  tr.fail-low td.verdict { color:var(--warn); font-weight:500; }
+  tr.error     { background:#fff7ed; }
+  .verdict { font-weight:600; white-space:nowrap; }
+  .verdict.pass { color:#15803d; }
+  .verdict.fail { color:var(--bad); }
+  .verdict.low  { color:var(--warn); font-weight:500; }
+  .verdict.err  { color:#c2410c; }
+  .note { color:var(--muted); font-size:11px; margin:4px 0 0; }
+  ul { margin:6px 0 0 18px; padding:0; }
+  ol { margin:6px 0 0 20px; padding:0; }
+  li { margin:3px 0; }
+  .box { border:1px solid var(--line); border-left:4px solid var(--warn); padding:8px 12px;
+         border-radius:4px; background:#fffbeb; margin:8px 0; }
+  .llm { border:1px solid var(--line); border-left:4px solid #1d4ed8; border-radius:4px;
+         padding:10px 14px; background:#f8fafc; margin:8px 0; }
+  .llm .llm-meta { color:var(--muted); font-size:11px; margin:0 0 8px; }
+  .llm .llm-meta code, .llm .ev code { background:#eef2f7; padding:1px 4px; border-radius:3px; }
+  .llm .ev { color:var(--muted); font-size:11px; margin:2px 0 0 0; }
+  .llm .disclaimer { font-size:11px; color:#7c4a03; background:#fffbeb;
+                     border:1px solid #fde68a; border-radius:4px; padding:6px 8px; margin:10px 0 0; }
+  a { color:#1d4ed8; }
+  footer { margin-top:28px; color:var(--muted); font-size:11px; border-top:1px solid var(--line);
+           padding-top:8px; }
+</style>
+</head>
+<body>
+
+<h1>Отчёт по прогону: {{ run.name or run.id }}</h1>
+<div class="meta">
+  Прогон <code>{{ run.id }}</code> · ревизия {{ checks.revision }} · создан {{ run_created_text }} ·
+  витрина {{ run.data_revision or 1 }} · состояние <strong>{{ run.state }}</strong> · backend <code>{{ run.backend }}</code><br>
+  Датасет: {{ run.dataset_name or "—" }}{% if run.dataset_root %} (<code>{{ run.dataset_root }}</code>){% endif %} ·
+  заявок в прогоне: {{ run.expected_pairs }} · документ сформирован {{ generated_at }}
+</div>
+<div class="links">
+  Детали в приложении (нужен вход владельцем прогона):
+  <a href="{{ run_url }}">страница прогона</a>
+  <a href="{{ report_url }}">отчёт проверок</a>
+  <a href="{{ explore_url }}">сводная таблица и список заявок</a>
+</div>
+
+<h2>Сводка</h2>
+<div class="cards">
+  {% for card in summary.cards if card.id in ('total_pairs','changed_apps','decision_flips') %}
+    <div class="card">
+      <div class="label">{{ card.label }}</div>
+      <div class="value">{{ card.value }}</div>
+    </div>
+  {% endfor %}
+  {% for card in summary.cards if card.id == 'approval_share' %}
+    <div class="card">
+      <div class="label">{{ card.label }}</div>
+      <div class="value">
+        {% if card.before_pct is not none %}{{ fmt_pct(card.before_pct) }}% → {{ fmt_pct(card.after_pct) }}%
+        {% else %}—{% endif %}
+      </div>
+      <div class="label">
+        {% if card.delta_pp is not none %}изменение {{ "%+.1f"|format(card.delta_pp) }} п.п.{% endif %}
+      </div>
+    </div>
+  {% endfor %}
+  {% for card in summary.cards if card.id == 'checks' %}
+    <div class="card">
+      <div class="label">Срабатывания проверок (HIGH / LOW)</div>
+      <div class="value">{{ card.high_fail }} / {{ card.low_fail }}</div>
+      <div class="label">технических ошибок: {{ card.technical_errors }}</div>
+    </div>
+  {% endfor %}
+</div>
+<p class="note">{{ summary.conclusion }}</p>
+
+<h2>Результаты автоматических проверок</h2>
+{% if checks.rows %}
+<table>
+  <thead>
+    <tr>
+      <th>Проверка</th><th>Срез</th><th>Аргумент</th>
+      <th>Числа</th><th>Метрика</th><th>Вердикт</th><th>Заявки (примеры)</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for row in checks.rows %}
+    <tr class="{% if row.execution_state != 'DONE' %}error{% elif row.RESULT == 'FAIL' and row.CONFIDENCE == 'HIGH' %}fail-high{% elif row.RESULT == 'FAIL' %}fail-low{% endif %}">
+      <td>{{ row.LABEL }}</td>
+      <td>{{ row.SOURCE }}</td>
+      <td>{{ row.ARGUMENT or "—" }}</td>
+      <td class="num">{{ row.CNT }} / {{ row.TOTAL }}</td>
+      <td class="num">{% if row.METRIC is not none %}{{ "%.4g"|format(row.METRIC) }}{% else %}—{% endif %}</td>
+      <td class="verdict {% if row.execution_state != 'DONE' %}err{% elif row.RESULT == 'PASS' %}pass{% elif row.CONFIDENCE == 'LOW' %}low{% else %}fail{% endif %}">
+        {%- if row.execution_state != 'DONE' -%}
+          ОШИБКА ИСПОЛНЕНИЯ
+        {%- elif row.RESULT == 'PASS' -%}
+          PASS
+        {%- elif row.CONFIDENCE == 'LOW' -%}
+          FAIL · низкая уверенность (слабый сигнал)
+        {%- else -%}
+          FAIL
+        {%- endif -%}
+      </td>
+      <td>
+        {%- if row.APP_IDS -%}
+          {% for app_id in row.APP_IDS[:10] -%}
+            {%- if app_id|safe_app_id -%}
+              <a href="{{ base_url }}/runs/{{ run.id|urlpart }}/app/{{ app_id|urlpart }}">{{ app_id }}</a>
+            {%- else -%}
+              {{ app_id }}
+            {%- endif -%}
+            {%- if not loop.last %}, {% endif %}
+          {%- endfor %}
+          {%- if row.app_ids_are_sample %}
+            <span class="note">— примеры, всего найдено {{ row.CNT }}</span>
+          {%- endif %}
+        {%- else -%}—{%- endif -%}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+<p class="note">
+  Проверки вычислены по всему прогону; фильтры интерактивного интерфейса на эти
+  значения не влияют. Список заявок в строке ограничен параметром
+  <code>app_ids_limit</code>, поэтому он может быть короче, чем CNT.
+</p>
+{% else %}
+<p class="note">В этом прогоне не выполнялось ни одной проверки.</p>
+{% endif %}
+
+{% if checks.errors %}
+<h2>Технические ошибки исполнения</h2>
+<div class="box">
+  <p class="note">Это состояние <strong>исполнения</strong>, а не бизнес-вердикт FAIL.
+  Результат такой проверки отсутствует и не должен читаться как «нарушений нет».</p>
+  <ul>
+  {% for execution in checks.errors %}
+    <li><strong>{{ execution.check_id }}</strong> — {{ execution.error or "нет описания" }}</li>
+  {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+<h2>Независимое мнение ИИ</h2>
+{% if llm and llm.state == 'DONE' %}
+<div class="llm">
+  <p class="llm-meta">
+    Провайдер <code>{{ llm.provider }}</code> · запрошенная модель <code>{{ llm.model }}</code>
+    {%- if llm.response_model %} · ответила <code>{{ llm.response_model }}</code>{% endif %}
+    {%- if llm.latency_ms is not none %} · задержка {{ llm.latency_ms }} мс{% endif %}
+    {%- if llm.requested_at %} · запрошено {{ llm.requested_at }}{% endif %}
+    {%- if llm.usage %} · токены: вход {{ llm.usage.prompt_tokens }}, выход {{ llm.usage.completion_tokens }}{% endif %}
+    · отпечаток пакета <code>{{ llm.payload_hash or "—" }}</code>
+  </p>
+  {% if llm.last_attempt %}
+  <p class="note">Последняя попытка запроса ({{ llm.last_attempt.at }}) завершилась состоянием
+  <code>{{ llm.last_attempt.state }}</code>{% if llm.last_attempt.error %}: {{ llm.last_attempt.error }}{% endif %}.
+  Ниже показан более ранний успешный ответ.</p>
+  {% endif %}
+  {% if llm.summary %}<p>{{ llm.summary }}</p>{% endif %}
+
+  {% if llm.observations %}
+  <h3>Наблюдения модели</h3>
+  <ol>
+    {% for item in llm.observations %}
+    <li>
+      {{ item.text }}
+      {% if item.evidence %}
+        <div class="ev">
+          evidence <code>{{ item.evidence_id }}</code>:
+          {% if item.evidence.app_id|safe_app_id %}
+            заявка <a href="{{ base_url }}/runs/{{ run.id|urlpart }}/app/{{ item.evidence.app_id|urlpart }}">{{ item.evidence.app_id }}</a>
+          {% else %}
+            заявка {{ item.evidence.app_id }}
+          {% endif %}
+          · <code>{{ item.evidence.path }}</code>
+          {% if item.evidence.array_key %} · ARRAY_KEY <code>{{ item.evidence.array_key }}</code>{% endif %}
+          · {{ item.evidence.change_type }}
+          · до: <code>{{ item.evidence.before or "(пусто)" }}</code>
+          · после: <code>{{ item.evidence.after or "(пусто)" }}</code>
+        </div>
+      {% elif item.evidence_id %}
+        <div class="ev">evidence <code>{{ item.evidence_id }}</code></div>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ol>
+  {% endif %}
+
+  {% if llm.uncertainty %}
+  <h3>Чего не хватает для вывода</h3>
+  <ul>{% for item in llm.uncertainty %}<li>{{ item }}</li>{% endfor %}</ul>
+  {% endif %}
+
+  {% if llm.next_steps %}
+  <h3>Что предлагает проверить</h3>
+  <ul>{% for item in llm.next_steps %}<li>{{ item }}</li>{% endfor %}</ul>
+  {% endif %}
+
+  {% if llm.dropped_evidence %}
+  <p class="note">Отброшено наблюдений со ссылкой на evidence_id, которого не было
+  во входном пакете: {{ llm.dropped_evidence }}.</p>
+  {% endif %}
+  <p class="disclaimer">{{ llm.disclaimer }}</p>
+</div>
+{% elif llm %}
+<div class="box">
+  <p><strong>Мнение ИИ недоступно.</strong> Состояние: <code>{{ llm.state }}</code>.
+  Детерминированный отчёт и числа проверок от этого не меняются.</p>
+  {% if llm.error %}<p class="note">{{ llm.error }}</p>{% endif %}
+</div>
+{% else %}
+<div class="box">
+  <p><strong>Мнение ИИ не запрашивалось</strong> для этой ревизии прогона.</p>
+  {% if llm_status and not llm_status.available %}
+    <p class="note">Интеграция не настроена: {{ llm_status.reason }}.</p>
+  {% elif llm_status %}
+    <p class="note">Интеграция настроена ({{ llm_status.provider }} / {{ llm_status.model }}),
+    запрос можно выполнить на странице отчёта в приложении.</p>
+  {% endif %}
+</div>
+{% endif %}
+
+<h2>Чаще изменяемые атрибуты</h2>
+{% set top = summary.cards | selectattr("id", "equalto", "top_attributes") | first %}
+{% if top and top.items %}
+<table>
+  <thead><tr><th>PATH</th><th class="num">Уникальных заявок</th></tr></thead>
+  <tbody>
+  {% for item in top["items"] %}
+    <tr>
+      <td>{{ item.path }}</td>
+      <td class="num"><a href="{{ explore_url }}">{{ item.cnt }}</a></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+<p class="note">Число ведёт в сводную таблицу приложения: раскладку и фильтры
+выбирает аналитик, детальный список заявок строится на сервере.</p>
+{% else %}
+<p class="note">Различий по атрибутам не найдено.</p>
+{% endif %}
+
+<h2>Признаки источника изменений</h2>
+{% set causes = summary.cards | selectattr("id", "equalto", "causes") | first %}
+{% if causes and causes["items"] %}
+<table>
+  <thead><tr><th>Категория</th><th class="num">Заявок</th></tr></thead>
+  <tbody>
+  {% for item in causes["items"] %}
+    <tr><td>{{ item.label }}</td><td class="num">{{ item.value }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+<p class="note">
+  Категория описывает наблюдаемые признаки, а не доказанную причину: два среза
+  ответов не позволяют отделить изменение входных данных от изменения логики
+  в общем случае.
+</p>
+{% endif %}
+
+<h2>Конфигурация прогона</h2>
+{% if configuration %}
+<table>
+  <thead><tr><th>Что</th><th>Значение</th></tr></thead>
+  <tbody>
+    <tr><td>Датасет</td><td>{{ run.dataset_name or "—" }}{% if run.dataset_root %} · <code>{{ run.dataset_root }}</code>{% endif %}</td></tr>
+    <tr><td>Срезы</td><td>{% for name, label in configuration.slices.items() %}{{ name }} = {{ label }}{% if not loop.last %}; {% endif %}{% else %}—{% endfor %}</td></tr>
+    <tr><td>Backend</td><td><code>{{ run.backend }}</code></td></tr>
+    <tr><td>Процедуры</td><td>
+      {% for stage, spec in configuration.procedures.items() %}
+        {{ stage }}: {{ spec.source_kind }} / <code>{{ spec.source_ref or "—" }}</code>{% if not loop.last %}<br>{% endif %}
+      {% else %}—{% endfor %}
+    </td></tr>
+    <tr><td>Проверки в конфигурации</td><td>
+      {% for spec in configuration.configured_checks %}
+        {{ spec.label }} ({{ spec.id }}, {{ spec.source_kind }} / <code>{{ spec.source_ref or "—" }}</code>,
+        параметры <code>{{ spec.params | json_inline }}</code>){% if not loop.last %}<br>{% endif %}
+      {% else %}—{% endfor %}
+    </td></tr>
+    <tr><td>Технические исключения</td><td>
+      {% for field in configuration.technical_fields %}<code>{{ field }}</code>{% if not loop.last %}, {% endif %}{% else %}—{% endfor %}
+    </td></tr>
+  </tbody>
+</table>
+<p class="note">Исходный код процедур и проверок в отчёт не попадает: он доступен
+в рабочей области приложения (журнал этапов ведёт к исполнявшейся версии кода).</p>
+{% else %}
+<p class="note">Конфигурация прогона недоступна.</p>
+{% endif %}
+
+<h2>Ограничения</h2>
+<ul>
+  {% for limitation in summary.limitations %}<li>{{ limitation }}</li>{% endfor %}
+  <li>Ссылки в этом документе ведут в приложение и требуют входа под владельцем прогона.</li>
+  <li>Блок «Независимое мнение ИИ» — это текст модели, а не проверка: он не меняет
+      ни одного числа, вердикта или confidence в этом отчёте.</li>
+  <li>Документ сформирован автоматически; итоговое решение принимает аналитик.</li>
+</ul>
+
+<footer>
+  Сформировано автоматически системой анализа изменений СПР · {{ generated_at }} ·
+  прогон <code>{{ run.id }}</code>, ревизия {{ checks.revision }}.
+</footer>
+</body>
+</html>

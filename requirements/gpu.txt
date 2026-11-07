@@ -1,0 +1,8 @@
+# GPU environment (optional). Install only where a compatible CUDA driver exists.
+# The CPU environment above must also be installed; COMPUTE_BACKEND=gpu selects
+# `python -m cudf.pandas` as the compute interpreter for the subprocesses.
+#
+# Not installed on the machine this was developed on (4 GB VRAM GTX 1650 Ti and a
+# nearly full disk), and therefore NOT verified — see docs/BENCHMARKS.md §5.
+-r cpu.txt
+# cudf-pandas==<the version matching your CUDA>

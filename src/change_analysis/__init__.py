@@ -1,0 +1,1 @@
+"""СПР change-analysis application."""
