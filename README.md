@@ -304,14 +304,21 @@ PYTHONPATH=src .venv/bin/python -m change_analysis.cli run analyst
 Все команды — из корня `app/`.
 
 ```bash
-# модульные тесты (база не нужна): контракты сериализации, массивы, four change types,
+# модульные тесты (база не нужна): контракты сериализации, массивы, четыре типа изменения,
 # загрузчик проверок, контракт строки проверки, адаптер LLM
 .venv/bin/python -m pytest tests/unit -q
 
-# интеграционные и сквозные тесты: MartAPI, проверки, конвейер целиком.
-# Идут в ОТДЕЛЬНОЙ базе (по умолчанию change_analysis_test), рабочую не трогают
+# интеграционные и сквозные тесты: MartAPI, проверки, конвейер целиком,
+# изоляция пользователей, HTML-экспорт. Сквозные гоняют настоящий PipelineJob,
+# поэтому медленные (десятки секунд). Идут в ОТДЕЛЬНОЙ базе
+# (по умолчанию change_analysis_test), рабочую не трогают
 .venv/bin/python -m pytest tests/integration tests/e2e -q
 ```
+
+Браузерные сценарии — **не** pytest, а отдельные драйверы Playwright
+(`tests/e2e/ui_suite.py`): они кликают по живому приложению на отдельном порту. Инструкция
+запуска — `tests/e2e/README.md` (нужны запущенный `main.py` на `APP_PORT=8091`,
+воркер и `/usr/bin/chromium`).
 
 Тесты сами выбирают базу: `TEST_DATABASE_URL` (по умолчанию
 `postgresql://ca:ca@127.0.0.1:55432/change_analysis_test`) — см. `tests/conftest.py`.

@@ -101,6 +101,7 @@ Python 3.14.7). `load average` указан, потому что он менял
 | `… -m change_analysis.cli run analyst` (в чистой базе `bench_readme`) | `state=SUCCEEDED`, 139 с, `rows=289533 facts=21601 pairs=2002 changed=502 decision_changed=385`; база после проверки удалена |
 | установка в пустой venv (7 пакетов) | `pandas` отсутствует; `import main` прошёл; `bootstrap` создал 21 таблицу в пустой БД |
 | `pytest tests/unit -q` (`TEST_DATABASE_URL=…_test`) | 171 passed, 2 xfail |
+| `pytest tests/e2e -q` | **не запускал** (13 + 6 тестов гоняют настоящий `PipelineJob`, десятки секунд, машина занята); в README явно сказано, что они медленные и идут в тестовой базе |
 | `pytest tests/integration -q` | **3 падения** (см. ниже) — зона агента тестов |
 | `bash scripts/pg.sh init` / `status` | идемпотентно, «database change_analysis ready on 127.0.0.1:55432» |
 | `curl http://127.0.0.1:8000/login` | HTTP 200 (живое приложение, порт из `.env`) |
