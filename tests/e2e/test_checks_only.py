@@ -143,23 +143,39 @@ def apply_new_check(owner, run_id, settings):
         procedures.delete_procedure(owner, procedure_id)
 
 
+def _mart_fingerprint(run_id: str) -> dict:
+    """Content digest of the published datamart, not just its size.
+
+    Counting rows was not enough: replacing a value while keeping the row count
+    passed silently, so the test could not tell "not recomputed" from
+    "recomputed and wrong".
+    """
+    digest = query(
+        "SELECT md5(string_agg(app_id || '|' || path || '|' || coalesce(array_key, '')"
+        " || '|' || coalesce(value_before, '') || '|' || coalesce(value_after, '')"
+        " || '|' || diff_flag::text || '|' || change_type, E'\\n'"
+        " ORDER BY app_id, path, array_key)) AS d"
+        " FROM ca.comparison_rows WHERE run_id = %s", (run_id,))[0]["d"]
+    rows = query("SELECT count(*) AS n FROM ca.comparison_rows WHERE run_id = %s",
+                 (run_id,))[0]["n"]
+    segments = query("SELECT md5(string_agg(app_id || '|' || decision_before || '|'"
+                     " || decision_after || '|' || decision_changed::text, E'\\n'"
+                     " ORDER BY app_id)) AS d FROM ca.app_segments WHERE run_id = %s",
+                     (run_id,))[0]["d"]
+    facts = query("SELECT md5(string_agg(fact_id::text || '|' || cnt::text, ','"
+                  " ORDER BY fact_id)) AS d FROM ca.pivot_facts WHERE run_id = %s",
+                  (run_id,))[0]["d"]
+    return {"rows": rows, "comparison": digest, "segments": segments, "facts": facts}
+
+
 def test_checks_only_does_not_recompute_the_mart(finished_run_with_checks, owner, settings):
     run_id = finished_run_with_checks["run_id"]
-    rows_before = query("SELECT count(*) AS n FROM ca.comparison_rows WHERE run_id = %s",
-                        (run_id,))[0]["n"]
-    segments_before = query("SELECT count(*) AS n FROM ca.app_segments WHERE run_id = %s",
-                            (run_id,))[0]["n"]
-    facts_before = query("SELECT count(*) AS n FROM ca.pivot_facts WHERE run_id = %s",
-                         (run_id,))[0]["n"]
+    before = _mart_fingerprint(run_id)
 
     _, job = apply_new_check(owner, run_id, settings)
 
-    assert query("SELECT count(*) AS n FROM ca.comparison_rows WHERE run_id = %s",
-                 (run_id,))[0]["n"] == rows_before
-    assert query("SELECT count(*) AS n FROM ca.app_segments WHERE run_id = %s",
-                 (run_id,))[0]["n"] == segments_before
-    assert query("SELECT count(*) AS n FROM ca.pivot_facts WHERE run_id = %s",
-                 (run_id,))[0]["n"] == facts_before
+    after = _mart_fingerprint(run_id)
+    assert after == before, f"витрина изменилась после CHECKS_ONLY: {before} -> {after}"
     finished = query("SELECT state FROM ca.jobs WHERE id = %s", (int(job["id"]),))[0]
     assert finished["state"] == "SUCCEEDED"
 
