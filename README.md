@@ -227,6 +227,24 @@ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8080/login   # ожи�
 
 ---
 
+## 5.1. Канонический демонстрационный прогон
+
+В базе на демо-машине лежит готовый прогон, на который ссылаются `docs/DEMO.md` и
+`docs/BENCHMARKS.md`:
+
+| | |
+|---|---|
+| Название | **«Полный прогон»** |
+| `run_id` | `72bb615b-7168-42df-8ca9-6e47716d3411` |
+| Датасет | `RUN-20260827-0001` — **2002 пары заявок** |
+| Состояние | `SUCCEEDED` |
+| Строк витрины сравнения / фактов | 289 533 / 21 601 |
+| С заявок с различиями / со сменой решения | **502 / 385** |
+| Строк в отчёте проверок | 32 (5 выданных проверок) |
+| Из них различия есть, а решение то же | **117** (502 − 385) |
+
+Скриншоты всех шагов — `docs/screens/01-login.png` … `docs/screens/12-report-with-new-check.png`.
+
 ## 6. Первый полный прогон через интерфейс
 
 1. Войдите как `analyst`.
@@ -390,7 +408,7 @@ app/
 | `.venv/bin/python -m pytest tests/integration -q` | то же | **3 падения** на момент проверки (зона агента тестов): `test_approval_rate_numbers_reproduce_from_the_mart` (`UniqueViolation`), `test_export_files_are_per_run_and_do_not_leak_between_users`, `test_cell_keys_survive_values_with_separators` |
 | `tools/validate_against_reference.py OPEN` | запуск | 502 / 385 / 289 533, `ALL SEGMENT FIELDS MATCH`, `pipe=4.01s` |
 | `tools/validate_against_reference.py HOLDOUT` | запуск | 248 / 186, `ALL SEGMENT FIELDS MATCH`, `pipe=2.03s` |
-| `tools/acceptance.py …` | **не запускал**: создаёт ещё один прогон на 998 пар и ~250 МБ. Работоспособность подтверждена существующим прогоном `8475782e…` (`changed=248, decision_changed=186`), который был им создан | не проверено лично |
+| `tools/acceptance.py …` | **не запускал**: создаёт ещё один прогон на 998 пар и ~250 МБ. Работоспособность подтверждена тем, что такой прогон был им создан и дал `changed=248, decision_changed=186`, а те же числа независимо подтверждены `validate_against_reference.py HOLDOUT` | не проверено лично |
 | `curl`-проверка воркера / `worker.sh` | воркер работал как отдельный процесс во время всех прогонов | подтверждено журналом прогонов |
 | Вариант Б установки (внешний PostgreSQL, §3.1) | **не проверялся**: на этой машине нет второго кластера | не проверено |
 
