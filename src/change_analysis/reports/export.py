@@ -127,6 +127,7 @@ def _llm_view(stored: dict | None) -> dict | None:
         "uncertainty": [str(u) for u in (stored.get("uncertainty") or [])],
         "next_steps": [str(s) for s in (stored.get("next_steps") or [])],
         "dropped_evidence": int(stored.get("dropped_evidence") or 0),
+        "dropped_malformed": int(stored.get("dropped_malformed") or 0),
         "error": str(stored.get("error") or ""),
         "last_attempt": last_attempt,
         "disclaimer": LLM_DISCLAIMER,

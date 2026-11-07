@@ -224,6 +224,10 @@
   <ul>{% for item in llm.next_steps %}<li>{{ item }}</li>{% endfor %}</ul>
   {% endif %}
 
+  {% if llm.dropped_malformed %}
+  <p class="note">Отброшено наблюдений без текста (модель вернула пустое) —
+  {{ llm.dropped_malformed }}: они не показаны, но и не выдаются за валидные.</p>
+  {% endif %}
   {% if llm.dropped_evidence %}
   <p class="note">Отброшено наблюдений со ссылкой на evidence_id, которого не было
   во входном пакете: {{ llm.dropped_evidence }}.</p>

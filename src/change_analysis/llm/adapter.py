@@ -513,6 +513,7 @@ def _validate_response(parsed: dict[str, Any], known_ids: set[str]) -> dict[str,
 
     observations: list[dict[str, Any]] = []
     dropped = 0
+    malformed = 0
     raw_observations = parsed.get("observations")
     if isinstance(raw_observations, str):
         raw_observations = [raw_observations]
@@ -528,6 +529,7 @@ def _validate_response(parsed: dict[str, Any], known_ids: set[str]) -> dict[str,
                 dropped += 1          # cited evidence that was never sent
                 continue
             if not text:
+                malformed += 1   # unshowable answer is still a fact to count
                 continue
             observations.append({"text": text, "evidence_id": evidence_id})
             if len(observations) >= MAX_OBSERVATIONS:
@@ -543,6 +545,7 @@ def _validate_response(parsed: dict[str, Any], known_ids: set[str]) -> dict[str,
         "uncertainty": uncertainty,
         "next_steps": next_steps,
         "dropped_evidence": dropped,
+        "dropped_malformed": malformed,
         "schema_ok": bool(schema_keys & set(parsed.keys())),
     }
 

@@ -321,6 +321,10 @@ def report_page(run_id: str, revision: int | None = None) -> None:
                         ui.label("Что предлагает проверить").classes("font-medium mt-2")
                         for entry in stored["next_steps"]:
                             ui.label(f"— {entry}").classes("text-xs text-slate-600")
+                    if stored.get("dropped_malformed"):
+                        ui.label("Отброшено наблюдений без текста: "
+                                 f"{stored['dropped_malformed']}") \
+                            .classes("text-xs text-slate-500 mt-1")
                     if stored.get("dropped_evidence"):
                         ui.label(f"Отброшено наблюдений со ссылкой на evidence_id, которого "
                                  f"не было в пакете: {stored['dropped_evidence']}") \
