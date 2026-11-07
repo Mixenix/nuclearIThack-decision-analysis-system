@@ -11,6 +11,7 @@ set -euo pipefail
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$APP_DIR"
 PY="${PYTHON:-$APP_DIR/.venv/bin/python}"
+APP_PORT="${APP_PORT:-8000}"
 export PYTHONPATH="$APP_DIR/src"
 LOG_DIR="${LOG_DIR:-/tmp/spr-demo}"
 mkdir -p "$LOG_DIR"
@@ -40,6 +41,20 @@ stop_all() {
         ok "остановлен $name (pid $pid)"
       fi
       rm -f "$pidfile"
+    fi
+  done
+
+  # Процессы, запущенные не этим скриптом (например, вручную через web.sh),
+  # тоже нужно уметь погасить — иначе «--stop» врёт о том, что всё остановлено.
+  port_pid="$(ss -ltnp 2>/dev/null | sed -n "s/.*:${APP_PORT}[^0-9]*.*pid=\([0-9]*\).*/\1/p" | head -1)"
+  if [ -n "${port_pid:-}" ] && [ "$port_pid" != "$$" ]; then
+    if kill "$port_pid" 2>/dev/null; then
+      ok "остановлен процесс на порту ${APP_PORT} (pid $port_pid)"
+    fi
+  fi
+  for pid in $(pgrep -f "change_analysis.worker.main" 2>/dev/null || true); do
+    if kill "$pid" 2>/dev/null; then
+      ok "остановлен worker (pid $pid)"
     fi
   done
 }
