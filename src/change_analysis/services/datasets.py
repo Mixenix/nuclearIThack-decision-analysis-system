@@ -44,10 +44,17 @@ def discover_files(directory: Path, file_glob: str = "*.json") -> dict[str, Path
                            for p in patterns):
         raise InvalidRequest("file_glob: use filename masks, e.g. *.json,*.xml")
     result: dict[str, Path] = {}
+    root = directory.resolve()
     for pattern in patterns:
         for path in sorted(directory.glob(pattern.strip())):
             if not path.is_file():
                 continue
+            # ``is_file()`` follows symlinks: a link inside the slice could point
+            # outside the dataset root and still look like a normal input file.
+            resolved = path.resolve()
+            if not (resolved == root or resolved.is_relative_to(root)):
+                raise InvalidRequest(
+                    f"файл {path.name} ведёт за пределы каталога среза: {resolved}")
             if path.stem in result and result[path.stem] != path:
                 raise InvalidRequest(f"duplicate APP_ID={path.stem}: {result[path.stem]}, {path}")
             result[path.stem] = path
@@ -67,6 +74,13 @@ def precheck_dataset(root_ref: str, abs_root: str | None = None,
     manifest: dict[str, Any] = {}
     if not manifest_path.exists():
         errors.append(f"manifest.json not found in {run_dir}")
+        return {"ok": False, "errors": errors, "warnings": warnings, "pairs": 0,
+                "run_dir": str(run_dir)}
+    run_resolved = run_dir.resolve()
+    manifest_resolved = manifest_path.resolve()
+    if not (manifest_resolved == run_resolved
+            or manifest_resolved.is_relative_to(run_resolved)):
+        errors.append(f"manifest.json ведёт за пределы каталога набора: {manifest_resolved}")
         return {"ok": False, "errors": errors, "warnings": warnings, "pairs": 0,
                 "run_dir": str(run_dir)}
     try:

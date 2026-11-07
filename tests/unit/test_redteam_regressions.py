@@ -92,3 +92,36 @@ def test_validation_accepts_a_correct_row() -> None:
     row = {"LABEL": "L", "SOURCE": "AFTER", "CNT": 1, "TOTAL": 2, "METRIC": 0.5,
            "APP_IDS": ["REAL_APP"], "RESULT": "FAIL", "CONFIDENCE": "HIGH"}
     assert len(validate_rows([row], "run", known_app_ids={"REAL_APP"})) == 1
+
+
+# --- second red-team round ---------------------------------------------------
+
+def test_symlink_out_of_the_slice_is_refused(tmp_path: Path) -> None:
+    """A link inside the slice that points outside the dataset must be rejected."""
+    root = _dataset(tmp_path, "RESULTS/BEFORE", "RESULTS/AFTER")
+    outside = tmp_path / "outside.json"
+    outside.write_text("{}", encoding="utf-8")
+    link = root / "RUN" / "RESULTS" / "BEFORE" / "I2.json"
+    link.symlink_to(outside)
+
+    result = precheck_dataset("RUN", str(root), "*.json")
+    assert result["ok"] is False
+    assert any("за пределы" in e or "escapes" in e for e in result["errors"]), result["errors"]
+
+
+def test_cnt_greater_than_total_is_refused() -> None:
+    row = {"LABEL": "L", "SOURCE": "AFTER", "CNT": 5, "TOTAL": 2, "METRIC": 0.5,
+           "APP_IDS": [], "RESULT": "FAIL", "CONFIDENCE": "HIGH"}
+    with pytest.raises(CheckError):
+        validate_rows([row], "run")
+
+
+def test_builtin_checks_are_listed_without_importing() -> None:
+    """Preparation must not import the delivered files; the light listing proves it."""
+    from change_analysis.checks.loader import list_builtin_checks, list_builtin_checks_light
+
+    light = {spec.id for spec in list_builtin_checks_light()}
+    heavy = {spec.id for spec in list_builtin_checks()}
+    assert light == heavy, "лёгкий список должен совпадать с полным"
+    assert all(spec.entrypoint is None for spec in list_builtin_checks_light()), \
+        "лёгкий список не должен импортировать проверки"

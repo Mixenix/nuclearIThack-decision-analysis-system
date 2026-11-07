@@ -186,6 +186,30 @@ def _metadata_from_source(code: str, source_ref: str) -> tuple[str, str, dict[st
     return None
 
 
+def list_builtin_checks_light() -> list[CheckSpec]:
+    """The delivered checks, described from their source **without importing them**.
+
+    ``list_builtin_checks()`` imports the five files to prove that each exports a
+    callable ``CHECK``; that is right for the execution tests, but run preparation
+    only needs id/label/params.  Importing there put third-party module-level code
+    on the web process path, which the project promises not to do.
+    """
+    settings = load_settings()
+    out: list[CheckSpec] = []
+    for path in sorted(settings.checks_dir.glob("check_*.py")):
+        try:
+            code = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        meta = _metadata_from_source(code, str(path))
+        if meta is None or not meta[0]:
+            continue
+        check_id, label, params = meta
+        out.append(CheckSpec(id=check_id, label=label, params=params,
+                             source_kind="builtin", source_ref=str(path), code=code))
+    return out
+
+
 def list_script_checks() -> list[CheckSpec]:
     """Registered ``.py`` checks, described **without importing them**.
 
@@ -282,6 +306,10 @@ def validate_rows(rows: Any, run_id: str, known_app_ids: set[str] | None = None)
         total = _count_field(row.get("TOTAL"), "TOTAL", where)
         if cnt < 0 or total < 0:
             raise CheckError(f"{where}: CNT/TOTAL must not be negative")
+        if total and cnt > total:
+            raise CheckError(
+                f"{where}: CNT={cnt} is greater than TOTAL={total}; the application base "
+                "cannot be smaller than the number of applications found")
         app_ids = row.get("APP_IDS") or []
         if not isinstance(app_ids, (list, tuple)):
             raise CheckError(f"{where}: APP_IDS must be a list")

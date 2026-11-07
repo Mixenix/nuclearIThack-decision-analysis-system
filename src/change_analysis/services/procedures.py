@@ -16,6 +16,7 @@ from ..checks.loader import (
     CheckError,
     _metadata_from_source,
     list_builtin_checks,
+    list_builtin_checks_light,
     list_script_checks,
     load_from_file,
 )
@@ -113,7 +114,7 @@ def resolve_checks(owner_id: str, selections: list[dict[str, Any]] | None) -> li
     """Materialise the chosen checks, including their code."""
     if not selections:
         return []
-    builtin = {spec.id: spec for spec in list_builtin_checks()}
+    builtin = {spec.id: spec for spec in list_builtin_checks_light()}
     scripted = {spec.id: spec for spec in list_script_checks()}
     out: list[dict[str, Any]] = []
     for item in selections:

@@ -18,11 +18,11 @@ def default_selections(owner_id: str) -> dict[str, Any]:
     запустить" produces a run with an empty checks report, which looks like a
     broken report rather than a deliberate choice.
     """
-    from ..checks.loader import list_builtin_checks
+    from ..checks.loader import list_builtin_checks_light
 
     try:
         checks = [{"id": spec.id, "params": dict(spec.params)}
-                  for spec in list_builtin_checks()]
+                  for spec in list_builtin_checks_light()]
     except Exception:  # noqa: BLE001 - a missing task package must not break the page
         checks = []
     return {
