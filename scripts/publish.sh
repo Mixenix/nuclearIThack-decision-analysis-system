@@ -22,7 +22,9 @@ mkdir -p "$LOG_DIR"
 local_ip() {
   local ip=""
   if command -v ip >/dev/null 2>&1; then
-    ip="$(ip -4 route get 1.1.1.1 2>/dev/null | sed -n 's/.* src \([0-9.]*\).*/\1/p' | head -1)"
+    # берём адрес обычного интерфейса (wlp/enp/eth), а не VPN-туннеля
+    ip="$(ip -4 -o addr show 2>/dev/null \
+          | awk '$2 ~ /^(wl|en|et)/ {print $4}' | cut -d/ -f1 | head -1)"
   fi
   if [ -z "$ip" ] && command -v hostname >/dev/null 2>&1; then
     ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
@@ -95,17 +97,47 @@ curl -s -o /dev/null --max-time 3 "http://127.0.0.1:$PORT/login" \
 rm -f "$LOG"
 URL=""
 
-if [ -f "$HOME/.cloudflared/cert.pem" ]; then
-  NAME="$(sed -n 's/^tunnel: *//p' "$HOME/.cloudflared/config.yaml" 2>/dev/null | head -1)"
-  HOSTNAME_CF="$(sed -n 's/^ *- hostname: *//p' "$HOME/.cloudflared/config.yaml" 2>/dev/null | head -1)"
-  bold "Найден именованный туннель Cloudflare${NAME:+ (id $NAME)}"
-  cloudflared tunnel run ${NAME:---url http://127.0.0.1:$PORT} >"$LOG" 2>&1 &
+# Порядок выбора канала:
+#   1) именованный туннель по токену — единственный, что работает за CGNAT и через VPN;
+#   2) именованный туннель по сертификату (локальный конфиг);
+#   3) временный туннель Cloudflare;
+#   4) запасной SSH-туннель.
+CF_BIN="${CF_BIN:-cloudflared}"
+[ -x /tmp/cf-new ] && CF_BIN=/tmp/cf-new
+TOKEN_FILE="$HOME/.cloudflared/graeae.token"
+HOST_FILE="$HOME/.cloudflared/graeae-host.txt"
+URL=""
+
+wait_for_registration() {
+  for _ in $(seq 1 40); do
+    grep -q "Registered tunnel connection" "$LOG" 2>/dev/null && return 0
+    sleep 1
+  done
+  return 1
+}
+
+if [ -f "$TOKEN_FILE" ]; then
+  bold "Именованный туннель Cloudflare (по токену)"
+  "$CF_BIN" tunnel --protocol http2 --edge-ip-version 4 --no-autoupdate \
+      run --token "$(cat "$TOKEN_FILE")" >"$LOG" 2>&1 &
   echo $! >"$PIDFILE"
-  sleep 12
-  [ -n "$HOSTNAME_CF" ] && URL="https://$HOSTNAME_CF"
-else
-  bold "Именованного туннеля нет — поднимаю временный"
-  cloudflared tunnel --url "http://127.0.0.1:$PORT" >"$LOG" 2>&1 &
+  wait_for_registration && ok "туннель зарегистрирован" || warn "регистрация не подтвердилась"
+  HOST="$(head -1 "$HOST_FILE" 2>/dev/null || true)"
+  [ -n "$HOST" ] && URL="https://$HOST"
+elif [ -f "$HOME/.cloudflared/cert.pem" ]; then
+  bold "Именованный туннель Cloudflare (по сертификату)"
+  NAME="$(sed -n 's/^tunnel: *//p' "$HOME/.cloudflared/config.yaml" 2>/dev/null | head -1)"
+  HOST="$(sed -n 's/^ *- hostname: *//p' "$HOME/.cloudflared/config.yaml" 2>/dev/null | head -1)"
+  "$CF_BIN" tunnel run ${NAME:+"$NAME"} >"$LOG" 2>&1 &
+  echo $! >"$PIDFILE"
+  wait_for_registration || true
+  [ -n "$HOST" ] && URL="https://$HOST"
+fi
+
+if [ -z "$URL" ]; then
+  bold "Поднимаю временный туннель Cloudflare"
+  "$CF_BIN" tunnel --url "http://127.0.0.1:$PORT" --protocol http2 --edge-ip-version 4 \
+      >"$LOG" 2>&1 &
   echo $! >"$PIDFILE"
   for _ in $(seq 1 30); do
     URL="$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "$LOG" 2>/dev/null | head -1 || true)"
@@ -114,22 +146,9 @@ else
   done
 fi
 
-
-  if command -v ngrok >/dev/null 2>&1; then
-    if [ -n "${NGROK_AUTHTOKEN:-}" ] || [ -f "$HOME/.config/ngrok/ngrok.yml" ]; then
-      bold "Пробую ngrok (443)"
-      ngrok http "$PORT" --log=stdout --log-format=logfmt >"$LOG" 2>&1 &
-      echo $! >"$PIDFILE"
-      for _ in $(seq 1 30); do
-        URL="$(grep -oE 'https://[a-z0-9-]+\.ngrok(-free)?\.(app|dev)' "$LOG" 2>/dev/null | head -1 || true)"
-        [ -n "$URL" ] && break
-        sleep 1
-      done
-    fi
-  fi
-
 if [ -z "$URL" ]; then
   warn "адрес не получен; пробую запасной SSH-туннель"
+  pkill -f "cf-new tunnel" 2>/dev/null || true
   ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ServerAliveInterval=20 \
       -R 80:localhost:"$PORT" nokey@localhost.run >"$LOG" 2>&1 &
   echo $! >"$PIDFILE"
